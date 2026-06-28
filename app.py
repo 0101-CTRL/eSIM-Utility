@@ -1344,11 +1344,13 @@ async function copyAllRequestUrls() {
     return;
   }
 
-  const text = requestHistory
-    .map((item, idx) => `${idx + 1}. ${item.method} ${item.upstream_status_code} ${item.url}`)
-    .join("\n");
+  const lines = [];
 
-  await navigator.clipboard.writeText(text);
+  requestHistory.forEach(function(item, idx) {
+    lines.push(String(idx + 1) + ". " + item.method + " " + item.upstream_status_code + " " + item.url);
+  });
+
+  await navigator.clipboard.writeText(lines.join("\\n"));
   out({ copied_request_count: requestHistory.length });
 }
 
