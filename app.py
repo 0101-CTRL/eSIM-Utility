@@ -1032,20 +1032,7 @@ async def ui():
             </div>
           </div>
 
-          <p style="margin-top:10px;">
-            Simple template:
-          </p>
-
-          <div class="csv-template" id="csvTemplate">eid,activation_string,nickname
-89033023321180000000024642232289,LPA:1$cel.prod.ondemandconnectivity.com$activation-code,test1
-89033023321180000000024642232290,LPA:1$cel.prod.ondemandconnectivity.com$activation-code,test2</div>
-
-          <div class="button-row">
-            <button onclick="copyCsvTemplate()" class="ghost">Copy CSV Template</button>
-            <button onclick="downloadSampleCsv()" class="ghost">Download Sample CSV</button>
-          </div>
-
-          <p>
+                    <p>
             Note: The KB examples show error responses with line numbers when uploaded CSV data is invalid,
             such as an EID/modem mismatch or records that do not exist in the account.
           </p>
