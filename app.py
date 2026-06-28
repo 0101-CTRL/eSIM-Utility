@@ -579,19 +579,6 @@ async def ui():
       font-size: 12px;
     }
 
-    .csv-template {
-      margin-top: 10px;
-      background: #020617;
-      color: #dbeafe;
-      border-radius: 12px;
-      padding: 11px;
-      overflow-x: auto;
-      font-size: 12px;
-      line-height: 1.45;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      white-space: pre;
-    }
-
     .table-toolbar {
       display: flex;
       align-items: center;
@@ -1441,38 +1428,6 @@ async function getManageTask() {
     method: "GET",
     headers: authHeaders(false)
   }, "Loading management task...");
-}
-
-async function copyCsvTemplate() {
-  const template = document.getElementById("csvTemplate")?.textContent || "";
-  if (!template.trim()) {
-    out({ error: "CSV template not found." });
-    return;
-  }
-
-  await navigator.clipboard.writeText(template.trim() + "\n");
-  out({ copied: "CSV template copied to clipboard." });
-}
-
-function downloadSampleCsv() {
-  const template = document.getElementById("csvTemplate")?.textContent || "";
-  if (!template.trim()) {
-    out({ error: "CSV template not found." });
-    return;
-  }
-
-  const blob = new Blob([template.trim() + "\n"], { type: "text/csv" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-
-  a.href = url;
-  a.download = "esim_profile_activation_sample.csv";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-
-  URL.revokeObjectURL(url);
-  out({ downloaded: "esim_profile_activation_sample.csv" });
 }
 
 async function previewActivation() {

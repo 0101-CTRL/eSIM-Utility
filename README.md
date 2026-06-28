@@ -205,18 +205,7 @@ Optional columns:
 
     confirmation_code,nickname
 
-Simple example:
-
-    eid,activation_string,nickname
-    89033023321180000000024642232289,LPA:1$server.example.com$activation-code,test1
-    89033023321180000000024642232290,LPA:1$server.example.com$activation-code,test2
-
-Some carriers may require an optional 4-digit confirmation code:
-
-    eid,activation_string,confirmation_code,nickname
-    89033023321180000000024642232289,LPA:1$server.example.com$activation-code,1234,test1
-
-The UI includes a CSV Format Help panel with copy-template and download-sample buttons.
+The UI includes a CSV Format Help panel showing the required and optional columns.
 
 ## Security / Lab Use Warning
 
