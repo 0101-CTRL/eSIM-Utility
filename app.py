@@ -529,6 +529,69 @@ async def ui():
       border: 1px solid #fecaca;
     }
 
+    .csv-help {
+      margin-top: 12px;
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 13px;
+    }
+
+    .csv-help h3 {
+      margin: 0 0 6px;
+      font-size: 15px;
+    }
+
+    .csv-help p {
+      margin: 7px 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.42;
+    }
+
+    .csv-cols {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(160px, 1fr));
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .csv-col-box {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px;
+      font-size: 13px;
+    }
+
+    .csv-col-box strong {
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .csv-col-box code {
+      display: inline-block;
+      background: #eef2ff;
+      color: #3730a3;
+      border-radius: 7px;
+      padding: 3px 6px;
+      margin: 2px 3px 2px 0;
+      font-size: 12px;
+    }
+
+    .csv-template {
+      margin-top: 10px;
+      background: #020617;
+      color: #dbeafe;
+      border-radius: 12px;
+      padding: 11px;
+      overflow-x: auto;
+      font-size: 12px;
+      line-height: 1.45;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      white-space: pre;
+    }
+
     .table-toolbar {
       display: flex;
       align-items: center;
@@ -962,6 +1025,45 @@ async def ui():
           Recommended flow: upload CSV → preview → review bulk job → execute → inspect children.
         </div>
 
+        <div class="csv-help">
+          <h3>CSV Format Help</h3>
+          <p>
+            Bulk activation CSV files require an <strong>EID</strong> and an <strong>activation string</strong>.
+            Some carriers may also require a 4-digit confirmation code. Nickname is optional but useful.
+          </p>
+
+          <div class="csv-cols">
+            <div class="csv-col-box">
+              <strong>Required columns</strong>
+              <code>eid</code>
+              <code>activation_string</code>
+            </div>
+            <div class="csv-col-box">
+              <strong>Optional columns</strong>
+              <code>confirmation_code</code>
+              <code>nickname</code>
+            </div>
+          </div>
+
+          <p style="margin-top:10px;">
+            Simple template:
+          </p>
+
+          <div class="csv-template" id="csvTemplate">eid,activation_string,nickname
+89033023321180000000024642232289,LPA:1$cel.prod.ondemandconnectivity.com$activation-code,test1
+89033023321180000000024642232290,LPA:1$cel.prod.ondemandconnectivity.com$activation-code,test2</div>
+
+          <div class="button-row">
+            <button onclick="copyCsvTemplate()" class="ghost">Copy CSV Template</button>
+            <button onclick="downloadSampleCsv()" class="ghost">Download Sample CSV</button>
+          </div>
+
+          <p>
+            Note: The KB examples show error responses with line numbers when uploaded CSV data is invalid,
+            such as an EID/modem mismatch or records that do not exist in the account.
+          </p>
+        </div>
+
         <label style="margin-top:12px;">CSV file</label>
         <input id="csvFile" type="file" accept=".csv,text/csv" />
 
@@ -1339,6 +1441,38 @@ async function getManageTask() {
     method: "GET",
     headers: authHeaders(false)
   }, "Loading management task...");
+}
+
+async function copyCsvTemplate() {
+  const template = document.getElementById("csvTemplate")?.textContent || "";
+  if (!template.trim()) {
+    out({ error: "CSV template not found." });
+    return;
+  }
+
+  await navigator.clipboard.writeText(template.trim() + "\n");
+  out({ copied: "CSV template copied to clipboard." });
+}
+
+function downloadSampleCsv() {
+  const template = document.getElementById("csvTemplate")?.textContent || "";
+  if (!template.trim()) {
+    out({ error: "CSV template not found." });
+    return;
+  }
+
+  const blob = new Blob([template.trim() + "\n"], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+
+  a.href = url;
+  a.download = "esim_profile_activation_sample.csv";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+
+  URL.revokeObjectURL(url);
+  out({ downloaded: "esim_profile_activation_sample.csv" });
 }
 
 async function previewActivation() {
