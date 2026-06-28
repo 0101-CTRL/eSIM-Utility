@@ -2,7 +2,7 @@ from typing import Optional
 
 import httpx
 from fastapi import FastAPI, Header, HTTPException, UploadFile, File
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 APP_TITLE = "APIv3 eSIM Test UI"
 BASE_URL = "https://api.cradlepointecm.com/api/v3/beta"
@@ -63,6 +63,24 @@ def _api_response(r: httpx.Response) -> JSONResponse:
 @app.get("/health")
 async def health():
     return {"ok": True, "app": APP_TITLE}
+
+
+
+SAMPLE_ACTIVATION_CSV = """eid,activation_string,nickname
+89033023321180000000024642232289,LPA:1$cel.prod.ondemandconnectivity.com$activation-code,test1
+89033023321180000000024642232290,LPA:1$cel.prod.ondemandconnectivity.com$activation-code,test2
+"""
+
+
+@app.get("/api/esim-activations/sample-csv")
+async def download_sample_activation_csv():
+    return Response(
+        content=SAMPLE_ACTIVATION_CSV,
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": "attachment; filename=esim_profile_activation_sample.csv"
+        },
+    )
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -1032,6 +1050,15 @@ async def ui():
             </div>
           </div>
 
+          <div class="button-row">
+            <button onclick="downloadSampleCsv()" class="ghost">Download Sample CSV</button>
+          </div>
+
+          <p>
+            The sample CSV is useful for seeing the expected structure. For a successful live preview,
+            replace the sample EIDs and activation strings with real values from the target account/carrier.
+          </p>
+
                     <p>
             Note: The KB examples show error responses with line numbers when uploaded CSV data is invalid,
             such as an EID/modem mismatch or records that do not exist in the account.
@@ -1415,6 +1442,10 @@ async function getManageTask() {
     method: "GET",
     headers: authHeaders(false)
   }, "Loading management task...");
+}
+
+function downloadSampleCsv() {
+  window.location.href = "/api/esim-activations/sample-csv";
 }
 
 async function previewActivation() {

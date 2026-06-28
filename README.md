@@ -205,7 +205,7 @@ Optional columns:
 
     confirmation_code,nickname
 
-The UI includes a CSV Format Help panel showing the required and optional columns.
+The UI includes a CSV Format Help panel showing the required and optional columns, plus a Download Sample CSV button.
 
 ## Security / Lab Use Warning
 
