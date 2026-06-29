@@ -253,26 +253,22 @@ Run:
     sudo systemctl restart api-v3-esim-ui
 
 
-## GitHub Feature Requests
+## GitHub Feedback
 
-The UI includes a Feedback button that submits feature requests, bug reports, or general feedback from inside the tool.
+The UI includes a Feedback button.
 
-This requires a server-side GitHub token.
+Users can choose:
 
-Create or edit:
+- Feature Request
+- Bug Report
+- General Feedback
 
-    /etc/api-v3-esim-ui.env
+The tool opens a prefilled GitHub Issue for:
 
-Example:
+    https://github.com/0101-CTRL/eSIM-Utility/issues/new
 
-    GITHUB_REPO=0101-CTRL/eSIM-Utility
-    GITHUB_TOKEN=your_github_token_here
+No local GitHub token is required.
 
-The GitHub token needs permission to create issues in the target repository.
+The user reviews the prefilled issue in GitHub and clicks Submit new issue.
 
-After editing the env file, restart the service:
-
-    sudo systemctl daemon-reload
-    sudo systemctl restart api-v3-esim-ui
-
-The browser never sees the GitHub token. The UI posts to the local FastAPI backend, and the backend creates the GitHub Issue with the selected feedback type.
+Note: users must have permission to create issues in the target GitHub repository. If this repo is private, only users with access to the repo can submit issues this way.

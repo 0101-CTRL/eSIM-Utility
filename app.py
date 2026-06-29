@@ -1741,7 +1741,7 @@ async def ui():
         <div class="modal-header">
           <div>
             <h2>Feedback</h2>
-            <div class="muted">Submit feedback to the eSIM Utility GitHub repo from inside this tool.</div>
+            <div class="muted">Prepare feedback from inside this tool, then submit it through GitHub.</div>
           </div>
           <button onclick="closeFeatureModal()" class="modal-close">✕</button>
         </div>
@@ -1766,7 +1766,7 @@ async def ui():
         <input id="featureContact" placeholder="Name, email, team, or leave blank" />
 
         <div class="button-row">
-          <button id="submitFeedbackBtn" onclick="submitFeatureRequest()">Submit Feedback</button>
+          <button id="submitFeedbackBtn" onclick="submitFeatureRequest()">Open GitHub Issue</button>
           <button onclick="closeFeatureModal()" class="secondary">Cancel</button>
         </div>
       </div>
@@ -2345,27 +2345,13 @@ function closeFeatureModal() {
 }
 
 async function checkFeatureRequestConfig() {
-  const box = document.getElementById("featureConfigStatus");
+  const modal = getFeedbackModal ? getFeedbackModal() : document.getElementById("featureModal");
+  const box = modal ? modal.querySelector("#featureConfigStatus") : document.getElementById("featureConfigStatus");
   if (!box) return;
 
-  try {
-    const r = await fetch("/api/feature-request/config");
-    const body = await r.json();
-
-    box.style.display = "block";
-
-    if (body.github_token_configured) {
-      box.className = "notice ok";
-      box.textContent = "GitHub submission is configured for " + body.github_repo + ".";
-    } else {
-      box.className = "notice warn";
-      box.textContent = "GitHub token is not configured on the server. Submissions will not create issues until GITHUB_TOKEN is added.";
-    }
-  } catch (err) {
-    box.style.display = "block";
-    box.className = "notice danger";
-    box.textContent = "Could not check GitHub submission configuration.";
-  }
+  box.style.display = "block";
+  box.className = "notice ok";
+  box.textContent = "Feedback opens a prefilled GitHub Issue. No local GitHub token is required.";
 }
 
 function setFeedbackSubmitStatus(kind, message) {
@@ -2381,12 +2367,21 @@ function setFeedbackSubmitStatus(kind, message) {
   box.textContent = message;
 }
 
-async function submitFeatureRequest() {
-  const requestType = document.getElementById("featureType")?.value || "feature";
-  const title = document.getElementById("featureTitle").value.trim();
-  const details = document.getElementById("featureDetails").value.trim();
-  const contact = document.getElementById("featureContact").value.trim();
-  const submitBtn = document.getElementById("submitFeedbackBtn");
+function submitFeatureRequest() {
+  const modal = getFeedbackModal ? getFeedbackModal() : document.getElementById("featureModal");
+
+  const requestType = getFeedbackValue ? getFeedbackValue("#featureType") : document.getElementById("featureType").value.trim();
+  const title = getFeedbackValue ? getFeedbackValue("#featureTitle") : document.getElementById("featureTitle").value.trim();
+  const details = getFeedbackValue ? getFeedbackValue("#featureDetails") : document.getElementById("featureDetails").value.trim();
+  const contact = getFeedbackValue ? getFeedbackValue("#featureContact") : document.getElementById("featureContact").value.trim();
+
+  const typeMap = {
+    feature: "Feature Request",
+    bug: "Bug Report",
+    feedback: "General Feedback"
+  };
+
+  const typeLabel = typeMap[requestType] || "General Feedback";
 
   if (!title) {
     setFeedbackSubmitStatus("bad", "Title is required before feedback can be submitted.");
@@ -2400,233 +2395,43 @@ async function submitFeatureRequest() {
     return;
   }
 
-  const originalButtonHtml = submitBtn ? submitBtn.innerHTML : "";
+  const issueTitle = "[" + typeLabel + "] " + title;
 
-  try {
-    if (submitBtn) {
-      submitBtn.disabled = true;
-      submitBtn.innerHTML = '<span class="feedback-inline-spinner"></span>Submitting...';
-    }
+  const issueBody = [
+    "## Type",
+    "",
+    typeLabel,
+    "",
+    "## Details",
+    "",
+    details,
+    "",
+    "## Submitted From",
+    "",
+    "- App: eSIM Utility",
+    "- Page URL: " + window.location.href,
+    "- Submitted: " + new Date().toLocaleString(),
+    "",
+    "## Contact",
+    "",
+    contact || "Not provided"
+  ].join("\\n");
 
-    setFeedbackSubmitStatus("busy", "Submitting feedback to GitHub...");
-    setBusy(true, "Submitting feedback...");
+  const params = new URLSearchParams({
+    title: issueTitle,
+    body: issueBody
+  });
 
-    const r = await fetch("/api/feature-request", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        request_type: requestType,
-        title: title,
-        details: details,
-        contact: contact,
-        page_url: window.location.href
-      })
-    });
+  const url = "https://github.com/0101-CTRL/eSIM-Utility/issues/new?" + params.toString();
 
-    const body = await r.json();
+  setFeedbackSubmitStatus("good", "Opening GitHub with your feedback prefilled...");
+  window.open(url, "_blank", "noopener,noreferrer");
 
-    out({
-      local_status_code: r.status,
-      result: body
-    });
-
-    const configBox = document.getElementById("featureConfigStatus");
-    if (configBox) {
-      configBox.style.display = "block";
-      configBox.className = body.ok ? "notice ok" : "notice danger";
-      configBox.textContent = body.ok
-        ? "GitHub accepted the submission."
-        : body.message;
-    }
-
-    if (body.ok) {
-      setFeedbackSubmitStatus("good", "Submitted successfully. GitHub issue: " + body.issue_url);
-      document.getElementById("featureTitle").value = "";
-      document.getElementById("featureDetails").value = "";
-      document.getElementById("featureContact").value = "";
-    } else {
-      setFeedbackSubmitStatus("bad", body.message || "Submission failed. Check the output panel for details.");
-    }
-  } catch (err) {
-    setFeedbackSubmitStatus("bad", "Submission failed before completion: " + (err.message || String(err)));
-    out({
-      error: err.message || String(err),
-      action: "Submit Feedback"
-    });
-  } finally {
-    setBusy(false);
-
-    if (submitBtn) {
-      submitBtn.disabled = false;
-      submitBtn.innerHTML = originalButtonHtml || "Submit Feedback";
-    }
-  }
-}
-
-
-function getFeedbackModal() {
-  return document.getElementById("featureModal");
-}
-
-function getFeedbackValue(selector) {
-  const modal = getFeedbackModal();
-  const el = modal ? modal.querySelector(selector) : document.querySelector(selector);
-  return el ? el.value.trim() : "";
-}
-
-function openFeatureModal() {
-  const modal = getFeedbackModal();
-  if (modal) {
-    modal.classList.add("show");
-  }
-  checkFeatureRequestConfig();
-}
-
-function closeFeatureModal() {
-  const modal = getFeedbackModal();
-  if (modal) {
-    modal.classList.remove("show");
-  }
-}
-
-function setFeedbackSubmitStatus(kind, message) {
-  const modal = getFeedbackModal();
-  const box = modal ? modal.querySelector("#feedbackSubmitStatus") : document.getElementById("feedbackSubmitStatus");
-
-  if (!box) return;
-
-  box.className = "feedback-submit-status show";
-
-  if (kind) {
-    box.classList.add(kind);
-  }
-
-  box.textContent = message;
-}
-
-async function checkFeatureRequestConfig() {
-  const modal = getFeedbackModal();
-  const box = modal ? modal.querySelector("#featureConfigStatus") : document.getElementById("featureConfigStatus");
-  if (!box) return;
-
-  try {
-    const r = await fetch("/api/feature-request/config");
-    const body = await r.json();
-
-    box.style.display = "block";
-
-    if (body.github_token_configured) {
-      box.className = "notice ok";
-      box.textContent = "GitHub submission is configured for " + body.github_repo + ".";
-    } else {
-      box.className = "notice warn";
-      box.textContent = "GitHub token is not configured on the server. Submissions will not create issues until GITHUB_TOKEN is added.";
-    }
-  } catch (err) {
-    box.style.display = "block";
-    box.className = "notice danger";
-    box.textContent = "Could not check GitHub submission configuration.";
-  }
-}
-
-async function submitFeatureRequest() {
-  const modal = getFeedbackModal();
-
-  const requestType = getFeedbackValue("#featureType") || "feature";
-  const title = getFeedbackValue("#featureTitle");
-  const details = getFeedbackValue("#featureDetails");
-  const contact = getFeedbackValue("#featureContact");
-
-  const submitBtn = modal ? modal.querySelector("#submitFeedbackBtn") : document.getElementById("submitFeedbackBtn");
-
-  if (!title) {
-    setFeedbackSubmitStatus("bad", "Title is required before feedback can be submitted.");
-    out({
-      error: "Feedback title is required.",
-      debug: "The UI could not read a value from #featureTitle inside #featureModal."
-    });
-    return;
-  }
-
-  if (!details) {
-    setFeedbackSubmitStatus("bad", "Details are required before feedback can be submitted.");
-    out({
-      error: "Feedback details are required.",
-      debug: "The UI could not read a value from #featureDetails inside #featureModal."
-    });
-    return;
-  }
-
-  const originalButtonHtml = submitBtn ? submitBtn.innerHTML : "";
-
-  try {
-    if (submitBtn) {
-      submitBtn.disabled = true;
-      submitBtn.innerHTML = '<span class="feedback-inline-spinner"></span>Submitting...';
-    }
-
-    setFeedbackSubmitStatus("busy", "Submitting feedback to GitHub...");
-    setBusy(true, "Submitting feedback...");
-
-    const r = await fetch("/api/feature-request", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        request_type: requestType,
-        title: title,
-        details: details,
-        contact: contact,
-        page_url: window.location.href
-      })
-    });
-
-    const body = await r.json();
-
-    out({
-      local_status_code: r.status,
-      result: body
-    });
-
-    const configBox = modal ? modal.querySelector("#featureConfigStatus") : document.getElementById("featureConfigStatus");
-    if (configBox) {
-      configBox.style.display = "block";
-      configBox.className = body.ok ? "notice ok" : "notice danger";
-      configBox.textContent = body.ok
-        ? "GitHub accepted the submission."
-        : body.message;
-    }
-
-    if (body.ok) {
-      setFeedbackSubmitStatus("good", "Submitted successfully. GitHub issue: " + body.issue_url);
-
-      const titleEl = modal ? modal.querySelector("#featureTitle") : document.getElementById("featureTitle");
-      const detailsEl = modal ? modal.querySelector("#featureDetails") : document.getElementById("featureDetails");
-      const contactEl = modal ? modal.querySelector("#featureContact") : document.getElementById("featureContact");
-
-      if (titleEl) titleEl.value = "";
-      if (detailsEl) detailsEl.value = "";
-      if (contactEl) contactEl.value = "";
-    } else {
-      setFeedbackSubmitStatus("bad", body.message || "Submission failed. Check the output panel for details.");
-    }
-  } catch (err) {
-    setFeedbackSubmitStatus("bad", "Submission failed before completion: " + (err.message || String(err)));
-    out({
-      error: err.message || String(err),
-      action: "Submit Feedback"
-    });
-  } finally {
-    setBusy(false);
-
-    if (submitBtn) {
-      submitBtn.disabled = false;
-      submitBtn.innerHTML = originalButtonHtml || "Submit Feedback";
-    }
-  }
+  out({
+    action: "Open GitHub Issue",
+    message: "Opened a prefilled GitHub Issue. The user submits it from GitHub, so no local GitHub token is required.",
+    issue_url: url
+  });
 }
 
 </script>
