@@ -147,7 +147,19 @@ async def download_sample_activation_csv():
 
 
 
+
 GITHUB_REPO = os.environ.get("GITHUB_REPO", "0101-CTRL/eSIM-Utility")
+
+
+@app.get("/api/feature-request/config")
+async def feature_request_config():
+    token_present = bool(os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN"))
+    return {
+        "ok": True,
+        "github_repo": GITHUB_REPO,
+        "github_token_configured": token_present,
+        "message": "GitHub token is configured." if token_present else "GitHub token is not configured on the server.",
+    }
 
 
 @app.post("/api/feature-request")
@@ -182,7 +194,8 @@ async def create_feature_request(payload: dict):
             status_code=200,
             content={
                 "ok": False,
-                "message": "GitHub token is not configured on the server. Set GITHUB_TOKEN in /etc/api-v3-esim-ui.env.",
+                "message": "GitHub token is not configured on the server. Add GITHUB_TOKEN to /etc/api-v3-esim-ui.env and restart the service.",
+                "github_repo": GITHUB_REPO,
             },
         )
 
@@ -206,6 +219,7 @@ async def create_feature_request(payload: dict):
         "Accept": "application/vnd.github+json",
         "Authorization": f"Bearer {github_token}",
         "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "eSIM-Utility",
     }
 
     async with httpx.AsyncClient(timeout=30) as client:
@@ -1267,9 +1281,9 @@ async def ui():
     <section class="feature-request-bar">
       <div>
         <strong>Have an idea for this utility?</strong>
-        <div class="muted">Open a prefilled GitHub Issue for the project.</div>
+        <div class="muted">Submit a feature request directly from this tool.</div>
       </div>
-      <a class="feature-request-link" href="https://github.com/0101-CTRL/eSIM-Utility/issues/new?title=%5BFeature+Request%5D+&body=%23%23+Feature+Request%0A%0ADescribe+the+feature+you+would+like+to+see.%0A%0A%23%23+Why+would+this+help%3F%0A%0AExplain+the+use+case+or+workflow+this+would+improve.%0A%0A%23%23+Submitted+From%0A%0A-+App%3A+eSIM+Utility%0A" target="_blank" rel="noopener noreferrer">Feature Request</a>
+      <button onclick="openFeatureModal()">Feature Request</button>
     </section>
 
     <section class="endpoint-strip">
@@ -1612,6 +1626,34 @@ async def ui():
 
         <div class="button-row">
           <button onclick="submitFeatureRequest()">Open GitHub Issue</button>
+          <button onclick="closeFeatureModal()" class="secondary">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="featureModal" class="modal-backdrop">
+      <div class="modal">
+        <div class="modal-header">
+          <div>
+            <h2>Feature Request</h2>
+            <div class="muted">Submit an issue to the eSIM Utility GitHub repo from inside this tool.</div>
+          </div>
+          <button onclick="closeFeatureModal()" class="modal-close">✕</button>
+        </div>
+
+        <div id="featureConfigStatus" class="notice warn" style="display:none;"></div>
+
+        <label>Title</label>
+        <input id="featureTitle" placeholder="Short summary of the idea" />
+
+        <label style="margin-top:12px;">Details</label>
+        <textarea id="featureDetails" placeholder="What should this feature do? Why would it help?"></textarea>
+
+        <label style="margin-top:12px;">Contact / submitter, optional</label>
+        <input id="featureContact" placeholder="Name, email, team, or leave blank" />
+
+        <div class="button-row">
+          <button onclick="submitFeatureRequest()">Submit Feature Request</button>
           <button onclick="closeFeatureModal()" class="secondary">Cancel</button>
         </div>
       </div>
@@ -2170,11 +2212,16 @@ async function executeActivation() {
   }, "Executing bulk activation job...");
 }
 
+
+
+
+
 function openFeatureModal() {
   const modal = document.getElementById("featureModal");
   if (modal) {
     modal.classList.add("show");
   }
+  checkFeatureRequestConfig();
 }
 
 function closeFeatureModal() {
@@ -2184,7 +2231,31 @@ function closeFeatureModal() {
   }
 }
 
-function submitFeatureRequest() {
+async function checkFeatureRequestConfig() {
+  const box = document.getElementById("featureConfigStatus");
+  if (!box) return;
+
+  try {
+    const r = await fetch("/api/feature-request/config");
+    const body = await r.json();
+
+    box.style.display = "block";
+
+    if (body.github_token_configured) {
+      box.className = "notice ok";
+      box.textContent = "GitHub submission is configured for " + body.github_repo + ".";
+    } else {
+      box.className = "notice warn";
+      box.textContent = "GitHub token is not configured on the server. Submissions will not create issues until GITHUB_TOKEN is added.";
+    }
+  } catch (err) {
+    box.style.display = "block";
+    box.className = "notice danger";
+    box.textContent = "Could not check GitHub submission configuration.";
+  }
+}
+
+async function submitFeatureRequest() {
   const title = document.getElementById("featureTitle").value.trim();
   const details = document.getElementById("featureDetails").value.trim();
   const contact = document.getElementById("featureContact").value.trim();
@@ -2199,40 +2270,51 @@ function submitFeatureRequest() {
     return;
   }
 
-  const issueTitle = "[Feature Request] " + title;
+  try {
+    setBusy(true, "Submitting feature request...");
 
-  const issueBody = [
-    "## Feature Request",
-    "",
-    details,
-    "",
-    "## Submitted From",
-    "",
-    "- App: eSIM Utility",
-    "- Page URL: " + window.location.href,
-    "- Submitted: " + new Date().toLocaleString(),
-    "",
-    "## Contact",
-    "",
-    contact || "Not provided"
-  ].join("\n");
+    const r = await fetch("/api/feature-request", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        title: title,
+        details: details,
+        contact: contact,
+        page_url: window.location.href
+      })
+    });
 
-  const params = new URLSearchParams({
-    title: issueTitle,
-    body: issueBody
-  });
+    const body = await r.json();
 
-  const url = "https://github.com/0101-CTRL/eSIM-Utility/issues/new?" + params.toString();
+    out({
+      local_status_code: r.status,
+      result: body
+    });
 
-  window.open(url, "_blank", "noopener,noreferrer");
+    const statusBox = document.getElementById("featureConfigStatus");
+    if (statusBox) {
+      statusBox.style.display = "block";
+      statusBox.className = body.ok ? "notice ok" : "notice danger";
+      statusBox.textContent = body.ok
+        ? "Feature request submitted: " + body.issue_url
+        : body.message;
+    }
 
-  out({
-    action: "Open GitHub Issue",
-    message: "Opened a prefilled GitHub Issue in a new tab. The user must click Submit new issue in GitHub.",
-    issue_url: url
-  });
-
-  closeFeatureModal();
+    if (body.ok) {
+      document.getElementById("featureTitle").value = "";
+      document.getElementById("featureDetails").value = "";
+      document.getElementById("featureContact").value = "";
+    }
+  } catch (err) {
+    out({
+      error: err.message || String(err),
+      action: "Submit Feature Request"
+    });
+  } finally {
+    setBusy(false);
+  }
 }
 
 </script>

@@ -255,12 +255,24 @@ Run:
 
 ## GitHub Feature Requests
 
-The UI includes a Feature Request button.
+The UI includes a Feature Request button that submits issues from inside the tool.
 
-The button opens a prefilled GitHub Issue page for:
+This requires a server-side GitHub token.
 
-    https://github.com/0101-CTRL/eSIM-Utility/issues/new
+Create or edit:
 
-The user can review the issue, add details, and click Submit new issue in GitHub.
+    /etc/api-v3-esim-ui.env
 
-This approach does not require a GitHub token on the server.
+Example:
+
+    GITHUB_REPO=0101-CTRL/eSIM-Utility
+    GITHUB_TOKEN=your_github_token_here
+
+The GitHub token needs permission to create issues in the target repository.
+
+After editing the env file, restart the service:
+
+    sudo systemctl daemon-reload
+    sudo systemctl restart api-v3-esim-ui
+
+The browser never sees the GitHub token. The UI posts to the local FastAPI backend, and the backend creates the GitHub Issue.
