@@ -1736,7 +1736,7 @@ async def ui():
       </div>
     </div>
 
-    <div id="featureModal" class="modal-backdrop">
+        <div id="featureModal" class="modal-backdrop">
       <div class="modal">
         <div class="modal-header">
           <div>
@@ -1756,7 +1756,7 @@ async def ui():
           <option value="feedback">General Feedback</option>
         </select>
 
-        <label>Title</label>
+        <label style="margin-top:12px;">Title</label>
         <input id="featureTitle" placeholder="Short summary" />
 
         <label style="margin-top:12px;">Details</label>
@@ -2446,6 +2446,170 @@ async function submitFeatureRequest() {
       document.getElementById("featureTitle").value = "";
       document.getElementById("featureDetails").value = "";
       document.getElementById("featureContact").value = "";
+    } else {
+      setFeedbackSubmitStatus("bad", body.message || "Submission failed. Check the output panel for details.");
+    }
+  } catch (err) {
+    setFeedbackSubmitStatus("bad", "Submission failed before completion: " + (err.message || String(err)));
+    out({
+      error: err.message || String(err),
+      action: "Submit Feedback"
+    });
+  } finally {
+    setBusy(false);
+
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = originalButtonHtml || "Submit Feedback";
+    }
+  }
+}
+
+
+function getFeedbackModal() {
+  return document.getElementById("featureModal");
+}
+
+function getFeedbackValue(selector) {
+  const modal = getFeedbackModal();
+  const el = modal ? modal.querySelector(selector) : document.querySelector(selector);
+  return el ? el.value.trim() : "";
+}
+
+function openFeatureModal() {
+  const modal = getFeedbackModal();
+  if (modal) {
+    modal.classList.add("show");
+  }
+  checkFeatureRequestConfig();
+}
+
+function closeFeatureModal() {
+  const modal = getFeedbackModal();
+  if (modal) {
+    modal.classList.remove("show");
+  }
+}
+
+function setFeedbackSubmitStatus(kind, message) {
+  const modal = getFeedbackModal();
+  const box = modal ? modal.querySelector("#feedbackSubmitStatus") : document.getElementById("feedbackSubmitStatus");
+
+  if (!box) return;
+
+  box.className = "feedback-submit-status show";
+
+  if (kind) {
+    box.classList.add(kind);
+  }
+
+  box.textContent = message;
+}
+
+async function checkFeatureRequestConfig() {
+  const modal = getFeedbackModal();
+  const box = modal ? modal.querySelector("#featureConfigStatus") : document.getElementById("featureConfigStatus");
+  if (!box) return;
+
+  try {
+    const r = await fetch("/api/feature-request/config");
+    const body = await r.json();
+
+    box.style.display = "block";
+
+    if (body.github_token_configured) {
+      box.className = "notice ok";
+      box.textContent = "GitHub submission is configured for " + body.github_repo + ".";
+    } else {
+      box.className = "notice warn";
+      box.textContent = "GitHub token is not configured on the server. Submissions will not create issues until GITHUB_TOKEN is added.";
+    }
+  } catch (err) {
+    box.style.display = "block";
+    box.className = "notice danger";
+    box.textContent = "Could not check GitHub submission configuration.";
+  }
+}
+
+async function submitFeatureRequest() {
+  const modal = getFeedbackModal();
+
+  const requestType = getFeedbackValue("#featureType") || "feature";
+  const title = getFeedbackValue("#featureTitle");
+  const details = getFeedbackValue("#featureDetails");
+  const contact = getFeedbackValue("#featureContact");
+
+  const submitBtn = modal ? modal.querySelector("#submitFeedbackBtn") : document.getElementById("submitFeedbackBtn");
+
+  if (!title) {
+    setFeedbackSubmitStatus("bad", "Title is required before feedback can be submitted.");
+    out({
+      error: "Feedback title is required.",
+      debug: "The UI could not read a value from #featureTitle inside #featureModal."
+    });
+    return;
+  }
+
+  if (!details) {
+    setFeedbackSubmitStatus("bad", "Details are required before feedback can be submitted.");
+    out({
+      error: "Feedback details are required.",
+      debug: "The UI could not read a value from #featureDetails inside #featureModal."
+    });
+    return;
+  }
+
+  const originalButtonHtml = submitBtn ? submitBtn.innerHTML : "";
+
+  try {
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<span class="feedback-inline-spinner"></span>Submitting...';
+    }
+
+    setFeedbackSubmitStatus("busy", "Submitting feedback to GitHub...");
+    setBusy(true, "Submitting feedback...");
+
+    const r = await fetch("/api/feature-request", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        request_type: requestType,
+        title: title,
+        details: details,
+        contact: contact,
+        page_url: window.location.href
+      })
+    });
+
+    const body = await r.json();
+
+    out({
+      local_status_code: r.status,
+      result: body
+    });
+
+    const configBox = modal ? modal.querySelector("#featureConfigStatus") : document.getElementById("featureConfigStatus");
+    if (configBox) {
+      configBox.style.display = "block";
+      configBox.className = body.ok ? "notice ok" : "notice danger";
+      configBox.textContent = body.ok
+        ? "GitHub accepted the submission."
+        : body.message;
+    }
+
+    if (body.ok) {
+      setFeedbackSubmitStatus("good", "Submitted successfully. GitHub issue: " + body.issue_url);
+
+      const titleEl = modal ? modal.querySelector("#featureTitle") : document.getElementById("featureTitle");
+      const detailsEl = modal ? modal.querySelector("#featureDetails") : document.getElementById("featureDetails");
+      const contactEl = modal ? modal.querySelector("#featureContact") : document.getElementById("featureContact");
+
+      if (titleEl) titleEl.value = "";
+      if (detailsEl) detailsEl.value = "";
+      if (contactEl) contactEl.value = "";
     } else {
       setFeedbackSubmitStatus("bad", body.message || "Submission failed. Check the output panel for details.");
     }
