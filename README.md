@@ -257,10 +257,10 @@ Run:
 
 The UI includes a Feature Request button.
 
-When a user submits the form, the app opens a prefilled GitHub Issue page for:
+The button opens a prefilled GitHub Issue page for:
 
     https://github.com/0101-CTRL/eSIM-Utility/issues/new
 
-The user can review the issue and click Submit new issue in GitHub.
+The user can review the issue, add details, and click Submit new issue in GitHub.
 
 This approach does not require a GitHub token on the server.

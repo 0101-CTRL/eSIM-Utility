@@ -535,6 +535,26 @@ async def ui():
       background: var(--purple);
     }
 
+    .feature-request-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 170px;
+      min-height: 40px;
+      padding: 10px 14px;
+      border-radius: 11px;
+      background: var(--purple);
+      color: white;
+      font-weight: 850;
+      text-decoration: none;
+      transition: transform .08s ease, box-shadow .08s ease, opacity .08s ease;
+    }
+
+    .feature-request-link:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 10px 18px rgba(109,40,217,.18);
+    }
+
     .modal-backdrop {
       display: none;
       position: fixed;
@@ -1249,7 +1269,7 @@ async def ui():
         <strong>Have an idea for this utility?</strong>
         <div class="muted">Open a prefilled GitHub Issue for the project.</div>
       </div>
-      <button onclick="openFeatureModal()">Feature Request</button>
+      <a class="feature-request-link" href="https://github.com/0101-CTRL/eSIM-Utility/issues/new?title=%5BFeature+Request%5D+&body=%23%23+Feature+Request%0A%0ADescribe+the+feature+you+would+like+to+see.%0A%0A%23%23+Why+would+this+help%3F%0A%0AExplain+the+use+case+or+workflow+this+would+improve.%0A%0A%23%23+Submitted+From%0A%0A-+App%3A+eSIM+Utility%0A" target="_blank" rel="noopener noreferrer">Feature Request</a>
     </section>
 
     <section class="endpoint-strip">
@@ -1578,14 +1598,7 @@ async def ui():
         <pre id="output">Ready.</pre>
       </div>
     </section>
-    <div id="featureModal" class="modal-backdrop">
-      <div class="modal">
-        <div class="modal-header">
-          <div>
-            <h2>Feature Request</h2>
-            <div class="muted">This opens a prefilled GitHub Issue in a new tab.</div>
-          </div>
-          <button onclick="closeFeatureModal()" class="modal-close">✕</button>
+<button onclick="closeFeatureModal()" class="modal-close">✕</button>
         </div>
 
         <label>Title</label>
