@@ -1607,7 +1607,132 @@ async def ui():
         min-width: unset;
       }
     }
-  </style>
+  
+    /* Final update widget placement override */
+    .hero {
+      position: relative !important;
+      padding-right: 360px !important;
+      min-height: 190px !important;
+    }
+
+    .hero h1 {
+      margin-right: 0 !important;
+      max-width: 760px !important;
+    }
+
+    .hero p {
+      max-width: 860px !important;
+    }
+
+    .hero-update-panel {
+      position: absolute !important;
+      top: 24px !important;
+      right: 24px !important;
+      width: 300px !important;
+      min-width: 0 !important;
+      display: flex !important;
+      flex-direction: column !important;
+      gap: 8px !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      background: transparent !important;
+      border: 0 !important;
+      border-radius: 0 !important;
+      box-shadow: none !important;
+      backdrop-filter: none !important;
+      z-index: 3 !important;
+    }
+
+    .hero-update-button,
+    .hero-update-panel .update-check-button {
+      width: 100% !important;
+      min-width: 0 !important;
+      height: 38px !important;
+      padding: 9px 13px !important;
+      border-radius: 999px !important;
+      background: linear-gradient(135deg, #111827, #334155) !important;
+      color: #ffffff !important;
+      font-size: 13px !important;
+      font-weight: 850 !important;
+      box-shadow: 0 10px 22px rgba(15, 23, 42, .18) !important;
+    }
+
+    .hero-update-button:hover,
+    .hero-update-panel .update-check-button:hover {
+      transform: translateY(-1px) !important;
+      box-shadow: 0 14px 28px rgba(15, 23, 42, .22) !important;
+    }
+
+    .update-version-mini {
+      color: #334155 !important;
+      font-size: 12px !important;
+      font-weight: 750 !important;
+      line-height: 1.35 !important;
+      text-align: left !important;
+      word-break: break-word !important;
+      text-shadow: none !important;
+    }
+
+    .hero-update-panel .update-check-status {
+      display: block !important;
+      margin-top: 0 !important;
+      padding: 8px 10px !important;
+      border-radius: 12px !important;
+      background: #f8fafc !important;
+      border: 1px solid #e2e8f0 !important;
+      color: #475569 !important;
+      font-size: 12px !important;
+      line-height: 1.35 !important;
+      text-align: left !important;
+      box-shadow: none !important;
+      text-shadow: none !important;
+    }
+
+    .hero-update-panel .update-check-status.good {
+      background: #ecfdf5 !important;
+      border-color: #bbf7d0 !important;
+      color: #047857 !important;
+    }
+
+    .hero-update-panel .update-check-status.warn {
+      background: #fffbeb !important;
+      border-color: #fde68a !important;
+      color: #92400e !important;
+    }
+
+    .hero-update-panel .update-check-status.bad {
+      background: #fef2f2 !important;
+      border-color: #fecaca !important;
+      color: #b91c1c !important;
+    }
+
+    .hero-update-panel code {
+      display: inline-block !important;
+      margin-top: 4px !important;
+      padding: 5px 7px !important;
+      border-radius: 8px !important;
+      background: #0f172a !important;
+      color: #ffffff !important;
+      border: 1px solid #334155 !important;
+      white-space: normal !important;
+      word-break: break-word !important;
+    }
+
+    @media (max-width: 980px) {
+      .hero {
+        padding-right: 24px !important;
+        min-height: 0 !important;
+      }
+
+      .hero-update-panel {
+        position: static !important;
+        width: 100% !important;
+        margin-top: 14px !important;
+      }
+    }
+
+
+</style>
 </head>
 
 <body>
@@ -1622,10 +1747,10 @@ async def ui():
         <h1>APIv3 eSIM Test UI</h1>
         <div class="hero-update-panel">
           <button onclick="checkForUpdates()" class="update-check-button hero-update-button">
-            <span>⬆️ Check for Updates</span>
+            <span>Check for Updates</span>
           </button>
           <div id="updateVersionMini" class="update-version-mini">Installed version: checking...</div>
-          <div id="updateCheckStatus" class="update-check-status show">Click Check for Updates to compare this install against GitHub.</div>
+          <div id="updateCheckStatus" class="update-check-status show">Current install shown below. Click to compare with GitHub.</div>
         </div>
         <p>
           Standalone local console for testing the APIv3 beta eSIM endpoints. Built around the three endpoint groups:
@@ -2880,7 +3005,7 @@ async function checkForUpdates() {
   } finally {
     if (button) {
       button.disabled = false;
-      button.innerHTML = originalButtonHtml || "<span>⬆️ Check for Updates</span>";
+      button.innerHTML = originalButtonHtml || "<span>Check for Updates</span>";
     }
   }
 }
@@ -2978,7 +3103,108 @@ async function checkForUpdates() {
   } finally {
     if (button) {
       button.disabled = false;
-      button.innerHTML = originalButtonHtml || "<span>⬆️ Check for Updates</span>";
+      button.innerHTML = originalButtonHtml || "<span>Check for Updates</span>";
+    }
+  }
+}
+
+window.addEventListener("DOMContentLoaded", loadLocalUpdateInfo);
+
+
+/* Final update widget behavior override */
+function setUpdateStatus(kind, message) {
+  const box = document.getElementById("updateCheckStatus");
+  if (!box) return;
+
+  box.className = "update-check-status show " + kind;
+  box.innerHTML = message;
+}
+
+function setUpdateVersionMini(message) {
+  const mini = document.getElementById("updateVersionMini");
+  if (mini) {
+    mini.textContent = message;
+  }
+}
+
+async function loadLocalUpdateInfo() {
+  try {
+    const r = await fetch("/api/update/local");
+    const body = await r.json();
+
+    if (body.ok) {
+      setUpdateVersionMini("Installed: v" + body.local_version + " / " + body.local_commit + " / " + body.branch);
+    } else {
+      setUpdateVersionMini("Installed version: unknown");
+    }
+  } catch (err) {
+    setUpdateVersionMini("Installed version: unavailable");
+  }
+}
+
+async function checkForUpdates() {
+  const button = document.querySelector(".update-check-button");
+  const originalButtonHtml = button ? button.innerHTML : "";
+
+  try {
+    if (button) {
+      button.disabled = true;
+      button.innerHTML = '<span class="feedback-inline-spinner"></span>Checking...';
+    }
+
+    setUpdateStatus("warn", "Checking GitHub for updates...");
+
+    const r = await fetch("/api/update/check");
+    const body = await r.json();
+
+    out({
+      action: "Check for Updates",
+      result: body
+    });
+
+    setUpdateVersionMini(
+      "Installed: v" + body.local_version + " / " + body.local_commit + " / " + body.branch
+    );
+
+    if (!body.ok && body.remote_error) {
+      setUpdateStatus(
+        "bad",
+        "<strong>Could not check updates.</strong><br>" + body.remote_error
+      );
+      return;
+    }
+
+    if (body.update_available) {
+      const remoteVersion = body.remote_version || "unknown";
+
+      setUpdateStatus(
+        "warn",
+        "<strong>Update available.</strong><br>" +
+        "Installed: v" + body.local_version + " / " + body.local_commit + "<br>" +
+        "Latest: v" + remoteVersion + " / " + body.remote_commit + "<br><br>" +
+        "Run:<br><code>" + body.update_command + "</code>"
+      );
+    } else {
+      setUpdateStatus(
+        "good",
+        "<strong>You're up to date.</strong><br>" +
+        "Installed: v" + body.local_version + " / " + body.local_commit
+      );
+    }
+  } catch (err) {
+    setUpdateStatus(
+      "bad",
+      "<strong>Update check failed.</strong><br>" + (err.message || String(err))
+    );
+
+    out({
+      error: err.message || String(err),
+      action: "Check for Updates"
+    });
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.innerHTML = originalButtonHtml || "<span>Check for Updates</span>";
     }
   }
 }
