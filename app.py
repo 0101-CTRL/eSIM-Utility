@@ -678,6 +678,52 @@ async def ui():
       border: 1px solid var(--border);
     }
 
+    .feedback-submit-status {
+      display: none;
+      margin-top: 12px;
+      border-radius: 12px;
+      padding: 10px 11px;
+      font-size: 13px;
+      border: 1px solid var(--border);
+      background: #f8fafc;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    .feedback-submit-status.show {
+      display: block;
+    }
+
+    .feedback-submit-status.busy {
+      background: #eff6ff;
+      border-color: #bfdbfe;
+      color: #1d4ed8;
+    }
+
+    .feedback-submit-status.good {
+      background: var(--green-bg);
+      border-color: #bbf7d0;
+      color: var(--green);
+    }
+
+    .feedback-submit-status.bad {
+      background: var(--red-bg);
+      border-color: #fecaca;
+      color: var(--red);
+    }
+
+    .feedback-inline-spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(255,255,255,.35);
+      border-top-color: white;
+      border-radius: 999px;
+      display: inline-block;
+      animation: spin .8s linear infinite;
+      vertical-align: -2px;
+      margin-right: 8px;
+    }
+
     .endpoint-strip {
       display: grid;
       grid-template-columns: repeat(3, minmax(240px, 1fr));
@@ -1701,6 +1747,7 @@ async def ui():
         </div>
 
         <div id="featureConfigStatus" class="notice warn" style="display:none;"></div>
+        <div id="feedbackSubmitStatus" class="feedback-submit-status"></div>
 
         <label>Feedback type</label>
         <select id="featureType">
@@ -1719,7 +1766,7 @@ async def ui():
         <input id="featureContact" placeholder="Name, email, team, or leave blank" />
 
         <div class="button-row">
-          <button onclick="submitFeatureRequest()">Submit Feedback</button>
+          <button id="submitFeedbackBtn" onclick="submitFeatureRequest()">Submit Feedback</button>
           <button onclick="closeFeatureModal()" class="secondary">Cancel</button>
         </div>
       </div>
@@ -2321,23 +2368,47 @@ async function checkFeatureRequestConfig() {
   }
 }
 
+function setFeedbackSubmitStatus(kind, message) {
+  const box = document.getElementById("feedbackSubmitStatus");
+  if (!box) return;
+
+  box.className = "feedback-submit-status show";
+
+  if (kind) {
+    box.classList.add(kind);
+  }
+
+  box.textContent = message;
+}
+
 async function submitFeatureRequest() {
   const requestType = document.getElementById("featureType")?.value || "feature";
   const title = document.getElementById("featureTitle").value.trim();
   const details = document.getElementById("featureDetails").value.trim();
   const contact = document.getElementById("featureContact").value.trim();
+  const submitBtn = document.getElementById("submitFeedbackBtn");
 
   if (!title) {
+    setFeedbackSubmitStatus("bad", "Title is required before feedback can be submitted.");
     out({ error: "Feedback title is required." });
     return;
   }
 
   if (!details) {
+    setFeedbackSubmitStatus("bad", "Details are required before feedback can be submitted.");
     out({ error: "Feedback details are required." });
     return;
   }
 
+  const originalButtonHtml = submitBtn ? submitBtn.innerHTML : "";
+
   try {
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<span class="feedback-inline-spinner"></span>Submitting...';
+    }
+
+    setFeedbackSubmitStatus("busy", "Submitting feedback to GitHub...");
     setBusy(true, "Submitting feedback...");
 
     const r = await fetch("/api/feature-request", {
@@ -2361,27 +2432,36 @@ async function submitFeatureRequest() {
       result: body
     });
 
-    const statusBox = document.getElementById("featureConfigStatus");
-    if (statusBox) {
-      statusBox.style.display = "block";
-      statusBox.className = body.ok ? "notice ok" : "notice danger";
-      statusBox.textContent = body.ok
-        ? "Feedback submitted: " + body.issue_url
+    const configBox = document.getElementById("featureConfigStatus");
+    if (configBox) {
+      configBox.style.display = "block";
+      configBox.className = body.ok ? "notice ok" : "notice danger";
+      configBox.textContent = body.ok
+        ? "GitHub accepted the submission."
         : body.message;
     }
 
     if (body.ok) {
+      setFeedbackSubmitStatus("good", "Submitted successfully. GitHub issue: " + body.issue_url);
       document.getElementById("featureTitle").value = "";
       document.getElementById("featureDetails").value = "";
       document.getElementById("featureContact").value = "";
+    } else {
+      setFeedbackSubmitStatus("bad", body.message || "Submission failed. Check the output panel for details.");
     }
   } catch (err) {
+    setFeedbackSubmitStatus("bad", "Submission failed before completion: " + (err.message || String(err)));
     out({
       error: err.message || String(err),
       action: "Submit Feedback"
     });
   } finally {
     setBusy(false);
+
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = originalButtonHtml || "Submit Feedback";
+    }
   }
 }
 
