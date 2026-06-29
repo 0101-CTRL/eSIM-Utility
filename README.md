@@ -255,7 +255,7 @@ Run:
 
 ## GitHub Feature Requests
 
-The UI includes a Feature Request button that submits issues from inside the tool.
+The UI includes a Feedback button that submits feature requests, bug reports, or general feedback from inside the tool.
 
 This requires a server-side GitHub token.
 
@@ -275,4 +275,4 @@ After editing the env file, restart the service:
     sudo systemctl daemon-reload
     sudo systemctl restart api-v3-esim-ui
 
-The browser never sees the GitHub token. The UI posts to the local FastAPI backend, and the backend creates the GitHub Issue.
+The browser never sees the GitHub token. The UI posts to the local FastAPI backend, and the backend creates the GitHub Issue with the selected feedback type.

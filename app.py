@@ -164,17 +164,26 @@ async def feature_request_config():
 
 @app.post("/api/feature-request")
 async def create_feature_request(payload: dict):
+    request_type = str(payload.get("request_type") or "feature").strip().lower()
     title = str(payload.get("title") or "").strip()
     details = str(payload.get("details") or "").strip()
     contact = str(payload.get("contact") or "").strip()
     page_url = str(payload.get("page_url") or "").strip()
+
+    type_map = {
+        "feature": "Feature Request",
+        "bug": "Bug Report",
+        "feedback": "General Feedback",
+    }
+
+    type_label = type_map.get(request_type, "General Feedback")
 
     if not title:
         return JSONResponse(
             status_code=200,
             content={
                 "ok": False,
-                "message": "Feature request title is required.",
+                "message": "Feedback title is required.",
             },
         )
 
@@ -183,7 +192,7 @@ async def create_feature_request(payload: dict):
             status_code=200,
             content={
                 "ok": False,
-                "message": "Feature request details are required.",
+                "message": "Feedback details are required.",
             },
         )
 
@@ -199,9 +208,13 @@ async def create_feature_request(payload: dict):
             },
         )
 
-    issue_title = f"[Feature Request] {title}"
+    issue_title = f"[{type_label}] {title}"
 
-    issue_body = f"""## Feature Request
+    issue_body = f"""## Type
+
+{type_label}
+
+## Details
 
 {details}
 
@@ -241,7 +254,8 @@ async def create_feature_request(payload: dict):
         status_code=200,
         content={
             "ok": r.is_success,
-            "message": "Feature request submitted to GitHub." if r.is_success else "GitHub rejected the feature request.",
+            "message": "Feedback submitted to GitHub." if r.is_success else "GitHub rejected the feedback submission.",
+            "feedback_type": type_label,
             "github_repo": GITHUB_REPO,
             "upstream_status_code": r.status_code,
             "issue_url": body.get("html_url") if isinstance(body, dict) else None,
@@ -547,6 +561,51 @@ async def ui():
       width: auto;
       min-width: 170px;
       background: var(--purple);
+    }
+
+    .feedback-button {
+      position: relative;
+      width: auto;
+      min-width: 170px;
+      overflow: hidden;
+      background: linear-gradient(135deg, #7c3aed, #2563eb, #06b6d4);
+      background-size: 220% 220%;
+      animation: feedbackGlow 5s ease infinite;
+      box-shadow: 0 12px 24px rgba(37, 99, 235, .20);
+    }
+
+    .feedback-button::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      transform: translateX(-110%);
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,.28), transparent);
+      animation: feedbackShimmer 2.6s ease-in-out infinite;
+    }
+
+    .feedback-button span {
+      position: relative;
+      z-index: 1;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .feedback-button:hover {
+      box-shadow: 0 14px 28px rgba(37, 99, 235, .28);
+      transform: translateY(-2px);
+    }
+
+    @keyframes feedbackGlow {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+
+    @keyframes feedbackShimmer {
+      0% { transform: translateX(-110%); }
+      45% { transform: translateX(110%); }
+      100% { transform: translateX(110%); }
     }
 
     .feature-request-link {
@@ -1280,10 +1339,10 @@ async def ui():
 
     <section class="feature-request-bar">
       <div>
-        <strong>Have an idea for this utility?</strong>
-        <div class="muted">Submit a feature request directly from this tool.</div>
+        <strong>Feedback for this utility?</strong>
+        <div class="muted">Send a feature request, bug report, or general feedback from inside the tool.</div>
       </div>
-      <button onclick="openFeatureModal()">Feature Request</button>
+      <button onclick="openFeatureModal()" class="feedback-button"><span>💬 Feedback</span></button>
     </section>
 
     <section class="endpoint-strip">
@@ -1616,10 +1675,10 @@ async def ui():
         </div>
 
         <label>Title</label>
-        <input id="featureTitle" placeholder="Short summary of the idea" />
+        <input id="featureTitle" placeholder="Short summary" />
 
         <label style="margin-top:12px;">Details</label>
-        <textarea id="featureDetails" placeholder="What should this feature do? Why would it help?"></textarea>
+        <textarea id="featureDetails" placeholder="Describe the request, bug, or feedback. For bugs, include what happened, what you expected, and any steps to reproduce."></textarea>
 
         <label style="margin-top:12px;">Contact / submitter, optional</label>
         <input id="featureContact" placeholder="Name, email, team, or leave blank" />
@@ -1635,25 +1694,32 @@ async def ui():
       <div class="modal">
         <div class="modal-header">
           <div>
-            <h2>Feature Request</h2>
-            <div class="muted">Submit an issue to the eSIM Utility GitHub repo from inside this tool.</div>
+            <h2>Feedback</h2>
+            <div class="muted">Submit feedback to the eSIM Utility GitHub repo from inside this tool.</div>
           </div>
           <button onclick="closeFeatureModal()" class="modal-close">✕</button>
         </div>
 
         <div id="featureConfigStatus" class="notice warn" style="display:none;"></div>
 
+        <label>Feedback type</label>
+        <select id="featureType">
+          <option value="feature">Feature Request</option>
+          <option value="bug">Bug Report</option>
+          <option value="feedback">General Feedback</option>
+        </select>
+
         <label>Title</label>
-        <input id="featureTitle" placeholder="Short summary of the idea" />
+        <input id="featureTitle" placeholder="Short summary" />
 
         <label style="margin-top:12px;">Details</label>
-        <textarea id="featureDetails" placeholder="What should this feature do? Why would it help?"></textarea>
+        <textarea id="featureDetails" placeholder="Describe the request, bug, or feedback. For bugs, include what happened, what you expected, and any steps to reproduce."></textarea>
 
         <label style="margin-top:12px;">Contact / submitter, optional</label>
         <input id="featureContact" placeholder="Name, email, team, or leave blank" />
 
         <div class="button-row">
-          <button onclick="submitFeatureRequest()">Submit Feature Request</button>
+          <button onclick="submitFeatureRequest()">Submit Feedback</button>
           <button onclick="closeFeatureModal()" class="secondary">Cancel</button>
         </div>
       </div>
@@ -2256,22 +2322,23 @@ async function checkFeatureRequestConfig() {
 }
 
 async function submitFeatureRequest() {
+  const requestType = document.getElementById("featureType")?.value || "feature";
   const title = document.getElementById("featureTitle").value.trim();
   const details = document.getElementById("featureDetails").value.trim();
   const contact = document.getElementById("featureContact").value.trim();
 
   if (!title) {
-    out({ error: "Feature request title is required." });
+    out({ error: "Feedback title is required." });
     return;
   }
 
   if (!details) {
-    out({ error: "Feature request details are required." });
+    out({ error: "Feedback details are required." });
     return;
   }
 
   try {
-    setBusy(true, "Submitting feature request...");
+    setBusy(true, "Submitting feedback...");
 
     const r = await fetch("/api/feature-request", {
       method: "POST",
@@ -2279,6 +2346,7 @@ async function submitFeatureRequest() {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
+        request_type: requestType,
         title: title,
         details: details,
         contact: contact,
@@ -2298,7 +2366,7 @@ async function submitFeatureRequest() {
       statusBox.style.display = "block";
       statusBox.className = body.ok ? "notice ok" : "notice danger";
       statusBox.textContent = body.ok
-        ? "Feature request submitted: " + body.issue_url
+        ? "Feedback submitted: " + body.issue_url
         : body.message;
     }
 
@@ -2310,7 +2378,7 @@ async function submitFeatureRequest() {
   } catch (err) {
     out({
       error: err.message || String(err),
-      action: "Submit Feature Request"
+      action: "Submit Feedback"
     });
   } finally {
     setBusy(false);
