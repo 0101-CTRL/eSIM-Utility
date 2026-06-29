@@ -2434,6 +2434,115 @@ function submitFeatureRequest() {
   });
 }
 
+
+/* Final feedback behavior override:
+   Feedback opens a prefilled GitHub Issue.
+   No local GitHub token is required for downloaded installs. */
+function getFeedbackModal() {
+  return document.getElementById("featureModal");
+}
+
+function getFeedbackValue(selector) {
+  const modal = getFeedbackModal();
+  const el = modal ? modal.querySelector(selector) : document.querySelector(selector);
+  return el ? el.value.trim() : "";
+}
+
+function setFeedbackSubmitStatus(kind, message) {
+  const modal = getFeedbackModal();
+  const box = modal ? modal.querySelector("#feedbackSubmitStatus") : document.getElementById("feedbackSubmitStatus");
+
+  if (!box) return;
+
+  box.className = "feedback-submit-status show";
+
+  if (kind) {
+    box.classList.add(kind);
+  }
+
+  box.textContent = message;
+}
+
+async function checkFeatureRequestConfig() {
+  const modal = getFeedbackModal();
+  const box = modal ? modal.querySelector("#featureConfigStatus") : document.getElementById("featureConfigStatus");
+
+  if (!box) return;
+
+  box.style.display = "block";
+  box.className = "notice ok";
+  box.textContent = "Feedback opens a prefilled GitHub Issue. No local GitHub token is required.";
+}
+
+function submitFeatureRequest() {
+  const requestType = getFeedbackValue("#featureType") || "feature";
+  const title = getFeedbackValue("#featureTitle");
+  const details = getFeedbackValue("#featureDetails");
+  const contact = getFeedbackValue("#featureContact");
+
+  const typeMap = {
+    feature: "Feature Request",
+    bug: "Bug Report",
+    feedback: "General Feedback"
+  };
+
+  const typeLabel = typeMap[requestType] || "General Feedback";
+
+  if (!title) {
+    setFeedbackSubmitStatus("bad", "Title is required before feedback can be submitted.");
+    out({ error: "Feedback title is required." });
+    return;
+  }
+
+  if (!details) {
+    setFeedbackSubmitStatus("bad", "Details are required before feedback can be submitted.");
+    out({ error: "Feedback details are required." });
+    return;
+  }
+
+  const issueTitle = "[" + typeLabel + "] " + title;
+
+  const issueBody = [
+    "## Type",
+    "",
+    typeLabel,
+    "",
+    "## Details",
+    "",
+    details,
+    "",
+    "## Submitted From",
+    "",
+    "- App: eSIM Utility",
+    "- Page URL: " + window.location.href,
+    "- Submitted: " + new Date().toLocaleString(),
+    "",
+    "## Contact",
+    "",
+    contact || "Not provided"
+  ].join("\\n");
+
+  const params = new URLSearchParams({
+    title: issueTitle,
+    body: issueBody
+  });
+
+  const url = "https://github.com/0101-CTRL/eSIM-Utility/issues/new?" + params.toString();
+
+  setFeedbackSubmitStatus("good", "Opening GitHub with your feedback prefilled...");
+  out({
+    action: "Open GitHub Issue",
+    message: "Opened a prefilled GitHub Issue. No local GitHub token is required.",
+    issue_url: url
+  });
+
+  const opened = window.open(url, "_blank", "noopener,noreferrer");
+
+  if (!opened) {
+    setFeedbackSubmitStatus("bad", "Popup blocked. Copy the GitHub issue URL from the output panel.");
+  }
+}
+
 </script>
 </body>
 </html>
