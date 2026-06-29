@@ -1,5 +1,6 @@
 from typing import Optional
 
+import os
 import httpx
 from fastapi import FastAPI, Header, HTTPException, UploadFile, File
 from fastapi.responses import HTMLResponse, JSONResponse, Response
@@ -141,6 +142,96 @@ async def download_sample_activation_csv():
         media_type="text/csv",
         headers={
             "Content-Disposition": "attachment; filename=esim_profile_activation_sample.csv"
+        },
+    )
+
+
+
+GITHUB_REPO = os.environ.get("GITHUB_REPO", "0101-CTRL/eSIM-Utility")
+
+
+@app.post("/api/feature-request")
+async def create_feature_request(payload: dict):
+    title = str(payload.get("title") or "").strip()
+    details = str(payload.get("details") or "").strip()
+    contact = str(payload.get("contact") or "").strip()
+    page_url = str(payload.get("page_url") or "").strip()
+
+    if not title:
+        return JSONResponse(
+            status_code=200,
+            content={
+                "ok": False,
+                "message": "Feature request title is required.",
+            },
+        )
+
+    if not details:
+        return JSONResponse(
+            status_code=200,
+            content={
+                "ok": False,
+                "message": "Feature request details are required.",
+            },
+        )
+
+    github_token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+
+    if not github_token:
+        return JSONResponse(
+            status_code=200,
+            content={
+                "ok": False,
+                "message": "GitHub token is not configured on the server. Set GITHUB_TOKEN in /etc/api-v3-esim-ui.env.",
+            },
+        )
+
+    issue_title = f"[Feature Request] {title}"
+
+    issue_body = f"""## Feature Request
+
+{details}
+
+## Submitted From
+
+- App: eSIM Utility
+- Page URL: {page_url or "Not provided"}
+
+## Contact
+
+{contact or "Not provided"}
+"""
+
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "Authorization": f"Bearer {github_token}",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.post(
+            f"https://api.github.com/repos/{GITHUB_REPO}/issues",
+            headers=headers,
+            json={
+                "title": issue_title,
+                "body": issue_body,
+            },
+        )
+
+    try:
+        body = r.json()
+    except Exception:
+        body = {"raw": r.text}
+
+    return JSONResponse(
+        status_code=200,
+        content={
+            "ok": r.is_success,
+            "message": "Feature request submitted to GitHub." if r.is_success else "GitHub rejected the feature request.",
+            "github_repo": GITHUB_REPO,
+            "upstream_status_code": r.status_code,
+            "issue_url": body.get("html_url") if isinstance(body, dict) else None,
+            "response": body,
         },
     )
 
@@ -418,6 +509,80 @@ async def ui():
       background: #431407;
       border-color: #9a3412;
       color: #fed7aa;
+    }
+
+    .feature-request-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 14px;
+      background: rgba(255,255,255,.84);
+      border: 1px solid rgba(229,231,235,.9);
+      border-radius: 18px;
+      padding: 14px 16px;
+      box-shadow: 0 8px 20px rgba(15,23,42,.05);
+      margin-bottom: 18px;
+    }
+
+    .feature-request-bar strong {
+      display: block;
+      margin-bottom: 3px;
+    }
+
+    .feature-request-bar button {
+      width: auto;
+      min-width: 170px;
+      background: var(--purple);
+    }
+
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(2, 6, 23, .62);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      padding: 22px;
+    }
+
+    .modal-backdrop.show {
+      display: flex;
+    }
+
+    .modal {
+      width: min(620px, 100%);
+      background: white;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      box-shadow: 0 24px 70px rgba(15,23,42,.34);
+      padding: 18px;
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .modal-header h2 {
+      margin: 0 0 4px;
+      font-size: 22px;
+    }
+
+    .modal textarea {
+      min-height: 150px;
+      resize: vertical;
+    }
+
+    .modal-close {
+      width: auto;
+      min-width: unset;
+      background: #f3f4f6;
+      color: #111827;
+      border: 1px solid var(--border);
     }
 
     .endpoint-strip {
@@ -1079,6 +1244,14 @@ async def ui():
       </div>
     </section>
 
+    <section class="feature-request-bar">
+      <div>
+        <strong>Have an idea for this utility?</strong>
+        <div class="muted">Submit a feature request directly to the project’s GitHub Issues page.</div>
+      </div>
+      <button onclick="openFeatureModal()">Feature Request</button>
+    </section>
+
     <section class="endpoint-strip">
       <div class="endpoint-mini">
         <strong>eSIM Profiles</strong>
@@ -1405,6 +1578,32 @@ async def ui():
         <pre id="output">Ready.</pre>
       </div>
     </section>
+    <div id="featureModal" class="modal-backdrop">
+      <div class="modal">
+        <div class="modal-header">
+          <div>
+            <h2>Feature Request</h2>
+            <div class="muted">This will create a GitHub Issue in the eSIM Utility repo.</div>
+          </div>
+          <button onclick="closeFeatureModal()" class="modal-close">✕</button>
+        </div>
+
+        <label>Title</label>
+        <input id="featureTitle" placeholder="Short summary of the idea" />
+
+        <label style="margin-top:12px;">Details</label>
+        <textarea id="featureDetails" placeholder="What should this feature do? Why would it help?"></textarea>
+
+        <label style="margin-top:12px;">Contact / submitter, optional</label>
+        <input id="featureContact" placeholder="Name, email, team, or leave blank" />
+
+        <div class="button-row">
+          <button onclick="submitFeatureRequest()">Submit to GitHub</button>
+          <button onclick="closeFeatureModal()" class="secondary">Cancel</button>
+        </div>
+      </div>
+    </div>
+
   </main>
 
 <script>
@@ -1957,6 +2156,75 @@ async function executeActivation() {
     headers: authHeaders(true)
   }, "Executing bulk activation job...");
 }
+
+function openFeatureModal() {
+  const modal = document.getElementById("featureModal");
+  if (modal) {
+    modal.classList.add("show");
+  }
+}
+
+function closeFeatureModal() {
+  const modal = document.getElementById("featureModal");
+  if (modal) {
+    modal.classList.remove("show");
+  }
+}
+
+async function submitFeatureRequest() {
+  const title = document.getElementById("featureTitle").value.trim();
+  const details = document.getElementById("featureDetails").value.trim();
+  const contact = document.getElementById("featureContact").value.trim();
+
+  if (!title) {
+    out({ error: "Feature request title is required." });
+    return;
+  }
+
+  if (!details) {
+    out({ error: "Feature request details are required." });
+    return;
+  }
+
+  try {
+    setBusy(true, "Submitting feature request...");
+
+    const r = await fetch("/api/feature-request", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        title,
+        details,
+        contact,
+        page_url: window.location.href
+      })
+    });
+
+    const body = await r.json();
+
+    out({
+      local_status_code: r.status,
+      result: body
+    });
+
+    if (body.ok) {
+      closeFeatureModal();
+      document.getElementById("featureTitle").value = "";
+      document.getElementById("featureDetails").value = "";
+      document.getElementById("featureContact").value = "";
+    }
+  } catch (err) {
+    out({
+      error: err.message || String(err),
+      action: "Submit Feature Request"
+    });
+  } finally {
+    setBusy(false);
+  }
+}
+
 </script>
 </body>
 </html>

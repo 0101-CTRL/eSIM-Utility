@@ -252,3 +252,23 @@ Run:
 
     sudo systemctl restart api-v3-esim-ui
 
+
+## GitHub Feature Requests
+
+The UI includes a Feature Request button that can create GitHub Issues.
+
+The backend requires a GitHub token stored server-side. Create this file:
+
+    /etc/api-v3-esim-ui.env
+
+Example:
+
+    GITHUB_REPO=0101-CTRL/eSIM-Utility
+    GITHUB_TOKEN=your_github_token_here
+
+The token should have permission to create issues in the target repository.
+
+Restart the service after changing the env file:
+
+    sudo systemctl restart api-v3-esim-ui
+
