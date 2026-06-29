@@ -321,6 +321,25 @@ def parse_github_owner_repo(remote_url):
     return None, None
 
 
+
+@app.get("/api/update/local")
+async def local_update_info():
+    local_version = read_local_version()
+
+    local_commit_result = run_git_command(["rev-parse", "--short", "HEAD"])
+    local_commit = local_commit_result["stdout"] if local_commit_result["ok"] else "unknown"
+
+    branch_result = run_git_command(["rev-parse", "--abbrev-ref", "HEAD"])
+    branch = branch_result["stdout"] if branch_result["ok"] else "main"
+
+    return {
+        "ok": True,
+        "local_version": local_version,
+        "local_commit": local_commit,
+        "branch": branch,
+    }
+
+
 @app.get("/api/update/check")
 async def check_for_updates():
     local_version = read_local_version()
@@ -759,6 +778,90 @@ async def ui():
       background: var(--red-bg);
       border-color: #fecaca;
       color: var(--red);
+    }
+
+    .hero {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 22px;
+    }
+
+    .hero > div:first-child {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    .hero-update-panel {
+      flex: 0 0 290px;
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 9px;
+      padding: 12px;
+      border: 1px solid rgba(255,255,255,.24);
+      border-radius: 18px;
+      background: rgba(255,255,255,.13);
+      box-shadow: 0 18px 40px rgba(15,23,42,.14);
+      backdrop-filter: blur(10px);
+    }
+
+    .hero-update-button {
+      width: 100%;
+      min-width: unset;
+    }
+
+    .update-version-mini {
+      font-size: 12px;
+      font-weight: 750;
+      color: rgba(255,255,255,.86);
+      line-height: 1.35;
+      word-break: break-word;
+    }
+
+    .hero-update-panel .update-check-status {
+      display: block;
+      margin-top: 0;
+      background: rgba(255,255,255,.16);
+      border-color: rgba(255,255,255,.25);
+      color: rgba(255,255,255,.90);
+    }
+
+    .hero-update-panel .update-check-status.good {
+      background: rgba(34,197,94,.18);
+      border-color: rgba(187,247,208,.48);
+      color: #dcfce7;
+    }
+
+    .hero-update-panel .update-check-status.warn {
+      background: rgba(245,158,11,.20);
+      border-color: rgba(253,230,138,.52);
+      color: #fef3c7;
+    }
+
+    .hero-update-panel .update-check-status.bad {
+      background: rgba(239,68,68,.18);
+      border-color: rgba(254,202,202,.52);
+      color: #fee2e2;
+    }
+
+    .hero-update-panel code {
+      color: white;
+      background: rgba(15,23,42,.35);
+      border-color: rgba(255,255,255,.20);
+      white-space: normal;
+      word-break: break-word;
+    }
+
+    @media (max-width: 840px) {
+      .hero {
+        flex-direction: column;
+      }
+
+      .hero-update-panel {
+        width: 100%;
+        flex-basis: auto;
+      }
     }
 
     @keyframes feedbackGlow {
@@ -1517,6 +1620,13 @@ async def ui():
     <section class="hero">
       <div>
         <h1>APIv3 eSIM Test UI</h1>
+        <div class="hero-update-panel">
+          <button onclick="checkForUpdates()" class="update-check-button hero-update-button">
+            <span>⬆️ Check for Updates</span>
+          </button>
+          <div id="updateVersionMini" class="update-version-mini">Installed version: checking...</div>
+          <div id="updateCheckStatus" class="update-check-status show">Click Check for Updates to compare this install against GitHub.</div>
+        </div>
         <p>
           Standalone local console for testing the APIv3 beta eSIM endpoints. Built around the three endpoint groups:
           profile inventory, profile management tasks, and bulk profile activation workflows.
@@ -1554,7 +1664,6 @@ async def ui():
         <div class="muted">Send a feature request, bug report, or general feedback from inside the tool.</div>
       </div>
       <button onclick="openFeatureModal()" class="feedback-button"><span>💬 Feedback</span></button>
-          <button onclick="checkForUpdates()" class="update-check-button"><span>⬆️ Check for Updates</span></button>
     </section>
 
     <section class="endpoint-strip">
@@ -2775,6 +2884,106 @@ async function checkForUpdates() {
     }
   }
 }
+
+
+function setUpdateStatus(kind, message) {
+  const box = document.getElementById("updateCheckStatus");
+  if (!box) return;
+
+  box.className = "update-check-status show " + kind;
+  box.innerHTML = message;
+}
+
+function setUpdateVersionMini(message) {
+  const mini = document.getElementById("updateVersionMini");
+  if (mini) {
+    mini.textContent = message;
+  }
+}
+
+async function loadLocalUpdateInfo() {
+  try {
+    const r = await fetch("/api/update/local");
+    const body = await r.json();
+
+    if (body.ok) {
+      setUpdateVersionMini("Installed: v" + body.local_version + " / " + body.local_commit + " / " + body.branch);
+    } else {
+      setUpdateVersionMini("Installed version: unknown");
+    }
+  } catch (err) {
+    setUpdateVersionMini("Installed version: unavailable");
+  }
+}
+
+async function checkForUpdates() {
+  const button = document.querySelector(".update-check-button");
+  const originalButtonHtml = button ? button.innerHTML : "";
+
+  try {
+    if (button) {
+      button.disabled = true;
+      button.innerHTML = '<span class="feedback-inline-spinner"></span>Checking...';
+    }
+
+    setUpdateStatus("warn", "Checking GitHub for updates...");
+
+    const r = await fetch("/api/update/check");
+    const body = await r.json();
+
+    out({
+      action: "Check for Updates",
+      result: body
+    });
+
+    setUpdateVersionMini(
+      "Installed: v" + body.local_version + " / " + body.local_commit + " / " + body.branch
+    );
+
+    if (!body.ok && body.remote_error) {
+      setUpdateStatus(
+        "bad",
+        "<strong>Could not check updates.</strong><br>" + body.remote_error
+      );
+      return;
+    }
+
+    if (body.update_available) {
+      const remoteVersion = body.remote_version || "unknown";
+
+      setUpdateStatus(
+        "warn",
+        "<strong>Update available.</strong><br>" +
+        "Installed: v" + body.local_version + " / " + body.local_commit + "<br>" +
+        "Latest: v" + remoteVersion + " / " + body.remote_commit + "<br><br>" +
+        "Run:<br><code>" + body.update_command + "</code>"
+      );
+    } else {
+      setUpdateStatus(
+        "good",
+        "<strong>You're up to date.</strong><br>" +
+        "Installed: v" + body.local_version + " / " + body.local_commit
+      );
+    }
+  } catch (err) {
+    setUpdateStatus(
+      "bad",
+      "<strong>Update check failed.</strong><br>" + (err.message || String(err))
+    );
+
+    out({
+      error: err.message || String(err),
+      action: "Check for Updates"
+    });
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.innerHTML = originalButtonHtml || "<span>⬆️ Check for Updates</span>";
+    }
+  }
+}
+
+window.addEventListener("DOMContentLoaded", loadLocalUpdateInfo);
 
 </script>
 </body>

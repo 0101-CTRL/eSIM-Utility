@@ -275,9 +275,9 @@ Note: users must have permission to create issues in the target GitHub repositor
 
 ## Updates
 
-The UI includes a Check for Updates button.
+The UI includes a Check for Updates button in the top-right header area.
 
-The button compares the installed Git commit against the latest commit on the configured `origin/main` branch.
+The button displays the installed version/commit and compares the installed Git commit against the latest commit on the configured `origin/main` branch.
 
 If an update is available, the UI shows the update command:
 
