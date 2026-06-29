@@ -296,6 +296,99 @@ async def ui():
     }
 
     .token-actions button {
+      min-width: 135px;
+    }
+
+    .auth-status {
+      margin-top: 10px;
+      border-radius: 12px;
+      padding: 10px 11px;
+      font-size: 13px;
+      border: 1px solid #374151;
+      background: #020617;
+      color: #9ca3af;
+      min-height: 40px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .auth-status.good {
+      background: #052e16;
+      border-color: #166534;
+      color: #bbf7d0;
+    }
+
+    .auth-status.bad {
+      background: #450a0a;
+      border-color: #991b1b;
+      color: #fecaca;
+    }
+
+    .auth-status.warn {
+      background: #431407;
+      border-color: #9a3412;
+      color: #fed7aa;
+    }
+
+    .lock-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 17px;
+      background: #111827;
+      border: 1px solid #374151;
+      flex: 0 0 auto;
+      transition: transform .22s ease, opacity .45s ease, background .22s ease, border-color .22s ease;
+    }
+
+    .lock-icon.checking {
+      animation: lockPulse .7s infinite;
+    }
+
+    .lock-icon.good {
+      background: #166534;
+      border-color: #22c55e;
+      animation: lockCloseFade 1.15s ease forwards;
+    }
+
+    .lock-icon.bad {
+      background: #991b1b;
+      border-color: #fca5a5;
+      animation: lockBreak .42s ease;
+    }
+
+    @keyframes lockPulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.12); }
+      100% { transform: scale(1); }
+    }
+
+    @keyframes lockCloseFade {
+      0% { transform: scale(1); opacity: 1; }
+      45% { transform: scale(1.18); opacity: 1; }
+      100% { transform: scale(.82); opacity: 0; }
+    }
+
+    @keyframes lockBreak {
+      0% { transform: translateX(0) rotate(0deg); }
+      20% { transform: translateX(-4px) rotate(-8deg); }
+      40% { transform: translateX(4px) rotate(8deg); }
+      60% { transform: translateX(-3px) rotate(-5deg); }
+      100% { transform: translateX(0) rotate(0deg); }
+    }
+
+    .token-actions {
+      display: flex;
+      gap: 10px;
+      align-items: end;
+      flex-wrap: wrap;
+    }
+
+    .token-actions button {
       min-width: 150px;
     }
 
@@ -970,14 +1063,17 @@ async def ui():
       <div class="token-row">
         <div>
           <label>Bearer token</label>
-          <input id="token" type="password" placeholder="Paste token, with or without Bearer prefix" autocomplete="off" onblur="checkAuth(false)" />
+          <input id="token" type="password" placeholder="Paste token, with or without Bearer prefix" autocomplete="off" oninput="resetTokenAuth()" />
           <div class="muted" style="margin-top:8px;color:#9ca3af;">
             Lab tool only. Do not expose this port publicly. The token is sent from this browser to the local FastAPI proxy.
           </div>
-          <div id="authStatus" class="auth-status">Authentication not checked yet.</div>
+          <div id="authStatus" class="auth-status">
+            <span id="authLockIcon" class="lock-icon">🔓</span>
+            <span id="authStatusText">Token not added yet.</span>
+          </div>
         </div>
         <div class="token-actions">
-          <button onclick="checkAuth(true)" class="ghost">Check Authentication</button>
+          <button id="addTokenBtn" onclick="addToken()" class="ghost">Add Token</button>
           <button onclick="clearToken()" class="ghost">Clear Token</button>
         </div>
       </div>
@@ -1345,43 +1441,66 @@ function setBusy(isBusy, label = "Running request...") {
   }
 }
 
-function clearToken() {
-  document.getElementById("token").value = "";
-  out({ cleared: "Bearer token field cleared" });
-}
+let tokenValidated = false;
 
-function setAuthStatus(kind, message) {
+function setAuthStatus(kind, message, iconText) {
   const box = document.getElementById("authStatus");
-  if (!box) return;
+  const text = document.getElementById("authStatusText");
+  const icon = document.getElementById("authLockIcon");
+
+  if (!box || !text || !icon) return;
 
   box.className = "auth-status";
+  icon.className = "lock-icon";
 
   if (kind) {
     box.classList.add(kind);
+    icon.classList.add(kind);
   }
 
-  box.textContent = message;
+  if (iconText) {
+    icon.textContent = iconText;
+  }
+
+  text.textContent = message;
 }
 
-async function checkAuth(showOutput) {
+function resetTokenAuth() {
+  tokenValidated = false;
+  setAuthStatus("", "Token not added yet.", "🔓");
+}
+
+function clearToken() {
+  document.getElementById("token").value = "";
+  tokenValidated = false;
+  setAuthStatus("", "Token cleared. Token not added yet.", "🔓");
+  out({ cleared: "Bearer token field cleared" });
+}
+
+async function addToken() {
   const raw = document.getElementById("token").value.trim();
 
   if (!raw) {
-    setAuthStatus("bad", "Missing bearer token.");
-    if (showOutput) {
-      out({
-        error: "Missing bearer token",
-        help: "Paste an APIv3 bearer token first."
-      });
-    }
+    tokenValidated = false;
+    setAuthStatus("bad", "No token entered. Paste a bearer token first.", "💔");
+    out({
+      error: "Missing bearer token",
+      help: "Paste an APIv3 bearer token, then click Add Token."
+    });
     return;
   }
 
   const token = raw.toLowerCase().startsWith("bearer ") ? raw : "Bearer " + raw;
 
   try {
-    setAuthStatus("", "Checking authentication...");
-    setBusy(true, "Checking authentication...");
+    tokenValidated = false;
+    setAuthStatus("", "Checking token...", "🔐");
+    const icon = document.getElementById("authLockIcon");
+    if (icon) {
+      icon.className = "lock-icon checking";
+    }
+
+    setBusy(true, "Checking token...");
 
     const r = await fetch("/api/auth/check", {
       method: "GET",
@@ -1396,24 +1515,30 @@ async function checkAuth(showOutput) {
     setLastRequest(body);
 
     if (body.auth_ok) {
-      setAuthStatus("good", body.message || "Authenticated.");
-    } else if (body.upstream_status_code === 403) {
-      setAuthStatus("warn", body.message || "Token is valid, but forbidden for this endpoint.");
+      tokenValidated = true;
+      setAuthStatus("good", body.message || "Token added. Access verified.", "🔒");
+      out({
+        local_status_code: r.status,
+        result: body
+      });
     } else {
-      setAuthStatus("bad", body.message || "Authentication check failed.");
-    }
-
-    if (showOutput) {
+      tokenValidated = false;
+      if (body.upstream_status_code === 403) {
+        setAuthStatus("warn", body.message || "Token accepted, but access is forbidden.", "💔");
+      } else {
+        setAuthStatus("bad", body.message || "Token rejected.", "💔");
+      }
       out({
         local_status_code: r.status,
         result: body
       });
     }
   } catch (err) {
-    setAuthStatus("bad", "Authentication check failed before completion.");
+    tokenValidated = false;
+    setAuthStatus("bad", "Token check failed before completion.", "💔");
     out({
       error: err.message || String(err),
-      action: "Check Authentication"
+      action: "Add Token"
     });
   } finally {
     setBusy(false);
@@ -1422,9 +1547,20 @@ async function checkAuth(showOutput) {
 
 function authHeaders(json = true) {
   const raw = document.getElementById("token").value.trim();
-  if (!raw) throw new Error("Missing bearer token");
 
-  const token = raw.toLowerCase().startsWith("bearer ") ? raw : `Bearer ${raw}`;
+  if (!raw) {
+    out({
+      error: "Missing bearer token",
+      help: "Paste an APIv3 bearer token and click Add Token before running this request."
+    });
+    throw new Error("Missing bearer token");
+  }
+
+  if (!tokenValidated) {
+    setAuthStatus("warn", "Token has not been added/verified yet. Click Add Token first.", "🔓");
+  }
+
+  const token = raw.toLowerCase().startsWith("bearer ") ? raw : "Bearer " + raw;
 
   const headers = {
     "Accept": "application/vnd.api+json",
