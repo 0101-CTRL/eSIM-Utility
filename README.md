@@ -187,7 +187,7 @@ If running manually instead of systemd:
 ## Basic Usage
 
 1. Open the UI.
-2. Paste an APIv3 bearer token into the token field.
+2. Paste an APIv3 bearer token into the token field and use Check Authentication to verify access.
 3. Use `eSIM Profiles` to look up profiles.
 4. Use `Manage Profile` to preview and submit profile management tasks.
 5. Use `Bulk Activations` to upload a CSV and create a preview job.

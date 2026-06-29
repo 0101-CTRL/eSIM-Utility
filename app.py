@@ -65,6 +65,68 @@ async def health():
     return {"ok": True, "app": APP_TITLE}
 
 
+@app.get("/api/auth/check")
+async def check_auth(authorization: Optional[str] = Header(default=None)):
+    if not authorization:
+        return JSONResponse(
+            status_code=200,
+            content={
+                "ok": False,
+                "auth_ok": False,
+                "message": "Missing bearer token.",
+                "upstream_status_code": None,
+                "upstream_request": None,
+                "response": None,
+            },
+        )
+
+    params = {
+        "page[limit]": "1",
+    }
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.get(
+            f"{BASE_URL}/esim_profiles",
+            headers=_json_headers(authorization),
+            params=params,
+        )
+
+    try:
+        body = r.json()
+    except Exception:
+        body = {"raw": r.text}
+
+    req = getattr(r, "request", None)
+
+    if r.status_code == 200:
+        message = "Authenticated. Token can access the eSIM profiles endpoint."
+        auth_ok = True
+    elif r.status_code == 401:
+        message = "Authentication failed. Token appears to be invalid or expired."
+        auth_ok = False
+    elif r.status_code == 403:
+        message = "Token was accepted, but access to this eSIM endpoint is forbidden."
+        auth_ok = False
+    else:
+        message = f"Auth check reached APIv3, but returned HTTP {r.status_code}."
+        auth_ok = False
+
+    return JSONResponse(
+        status_code=200,
+        content={
+            "ok": r.is_success,
+            "auth_ok": auth_ok,
+            "message": message,
+            "upstream_status_code": r.status_code,
+            "upstream_request": {
+                "method": req.method if req else None,
+                "url": str(req.url) if req else None,
+            },
+            "response": body,
+        },
+    )
+
+
 
 SAMPLE_ACTIVATION_CSV = """eid,activation_string,nickname
 89033023321180000000024642232289,LPA:1$cel.prod.ondemandconnectivity.com$activation-code,test1
@@ -224,6 +286,45 @@ async def ui():
       background: #020617;
       color: white;
       border-color: #374151;
+    }
+
+    .token-actions {
+      display: flex;
+      gap: 10px;
+      align-items: end;
+      flex-wrap: wrap;
+    }
+
+    .token-actions button {
+      min-width: 150px;
+    }
+
+    .auth-status {
+      margin-top: 10px;
+      border-radius: 12px;
+      padding: 10px 11px;
+      font-size: 13px;
+      border: 1px solid #374151;
+      background: #020617;
+      color: #9ca3af;
+    }
+
+    .auth-status.good {
+      background: #052e16;
+      border-color: #166534;
+      color: #bbf7d0;
+    }
+
+    .auth-status.bad {
+      background: #450a0a;
+      border-color: #991b1b;
+      color: #fecaca;
+    }
+
+    .auth-status.warn {
+      background: #431407;
+      border-color: #9a3412;
+      color: #fed7aa;
     }
 
     .endpoint-strip {
@@ -869,12 +970,16 @@ async def ui():
       <div class="token-row">
         <div>
           <label>Bearer token</label>
-          <input id="token" type="password" placeholder="Paste token, with or without Bearer prefix" autocomplete="off" />
+          <input id="token" type="password" placeholder="Paste token, with or without Bearer prefix" autocomplete="off" onblur="checkAuth(false)" />
           <div class="muted" style="margin-top:8px;color:#9ca3af;">
             Lab tool only. Do not expose this port publicly. The token is sent from this browser to the local FastAPI proxy.
           </div>
+          <div id="authStatus" class="auth-status">Authentication not checked yet.</div>
         </div>
-        <button onclick="clearToken()" class="ghost" style="min-width:140px;">Clear Token</button>
+        <div class="token-actions">
+          <button onclick="checkAuth(true)" class="ghost">Check Authentication</button>
+          <button onclick="clearToken()" class="ghost">Clear Token</button>
+        </div>
       </div>
     </section>
 
@@ -1243,6 +1348,76 @@ function setBusy(isBusy, label = "Running request...") {
 function clearToken() {
   document.getElementById("token").value = "";
   out({ cleared: "Bearer token field cleared" });
+}
+
+function setAuthStatus(kind, message) {
+  const box = document.getElementById("authStatus");
+  if (!box) return;
+
+  box.className = "auth-status";
+
+  if (kind) {
+    box.classList.add(kind);
+  }
+
+  box.textContent = message;
+}
+
+async function checkAuth(showOutput) {
+  const raw = document.getElementById("token").value.trim();
+
+  if (!raw) {
+    setAuthStatus("bad", "Missing bearer token.");
+    if (showOutput) {
+      out({
+        error: "Missing bearer token",
+        help: "Paste an APIv3 bearer token first."
+      });
+    }
+    return;
+  }
+
+  const token = raw.toLowerCase().startsWith("bearer ") ? raw : "Bearer " + raw;
+
+  try {
+    setAuthStatus("", "Checking authentication...");
+    setBusy(true, "Checking authentication...");
+
+    const r = await fetch("/api/auth/check", {
+      method: "GET",
+      headers: {
+        "Accept": "application/vnd.api+json",
+        "Authorization": token
+      }
+    });
+
+    const body = await r.json();
+
+    setLastRequest(body);
+
+    if (body.auth_ok) {
+      setAuthStatus("good", body.message || "Authenticated.");
+    } else if (body.upstream_status_code === 403) {
+      setAuthStatus("warn", body.message || "Token is valid, but forbidden for this endpoint.");
+    } else {
+      setAuthStatus("bad", body.message || "Authentication check failed.");
+    }
+
+    if (showOutput) {
+      out({
+        local_status_code: r.status,
+        result: body
+      });
+    }
+  } catch (err) {
+    setAuthStatus("bad", "Authentication check failed before completion.");
+    out({
+      error: err.message || String(err),
+      action: "Check Authentication"
+    });
+  } finally {
+    setBusy(false);
+  }
 }
 
 function authHeaders(json = true) {
