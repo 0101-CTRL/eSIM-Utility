@@ -272,3 +272,25 @@ No local GitHub token is required.
 The user reviews the prefilled issue in GitHub and clicks Submit new issue.
 
 Note: users must have permission to create issues in the target GitHub repository. If this repo is private, only users with access to the repo can submit issues this way.
+
+## Updates
+
+The UI includes a Check for Updates button.
+
+The button compares the installed Git commit against the latest commit on the configured `origin/main` branch.
+
+If an update is available, the UI shows the update command:
+
+    cd /opt/api-v3-esim-ui && bash update.sh
+
+The update script:
+
+- checks for local uncommitted changes
+- backs up the current `app.py`
+- pulls the latest `main` branch
+- refreshes Python dependencies
+- checks Python syntax
+- restarts the systemd service
+
+The web UI does not apply updates directly. This avoids giving the browser session permission to run system-level update commands.
+

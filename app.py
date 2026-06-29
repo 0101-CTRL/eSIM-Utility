@@ -1,6 +1,8 @@
+from pathlib import Path
 from typing import Optional
 
 import os
+import subprocess
 import httpx
 from fastapi import FastAPI, Header, HTTPException, UploadFile, File
 from fastapi.responses import HTMLResponse, JSONResponse, Response
@@ -262,6 +264,123 @@ async def create_feature_request(payload: dict):
             "response": body,
         },
     )
+
+
+
+APP_DIR = Path(__file__).resolve().parent
+VERSION_PATH = APP_DIR / "VERSION"
+
+
+def read_local_version():
+    try:
+        return VERSION_PATH.read_text().strip() or "unknown"
+    except Exception:
+        return "unknown"
+
+
+def run_git_command(args, timeout=20):
+    try:
+        completed = subprocess.run(
+            ["git"] + args,
+            cwd=str(APP_DIR),
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        return {
+            "ok": completed.returncode == 0,
+            "stdout": completed.stdout.strip(),
+            "stderr": completed.stderr.strip(),
+            "returncode": completed.returncode,
+        }
+    except Exception as exc:
+        return {
+            "ok": False,
+            "stdout": "",
+            "stderr": str(exc),
+            "returncode": -1,
+        }
+
+
+def parse_github_owner_repo(remote_url):
+    remote_url = (remote_url or "").strip()
+
+    if remote_url.startswith("git@github.com:"):
+      value = remote_url.split("git@github.com:", 1)[1]
+    elif "github.com/" in remote_url:
+      value = remote_url.split("github.com/", 1)[1]
+    else:
+      return None, None
+
+    value = value.removesuffix(".git").strip("/")
+    parts = value.split("/")
+
+    if len(parts) >= 2:
+      return parts[0], parts[1]
+
+    return None, None
+
+
+@app.get("/api/update/check")
+async def check_for_updates():
+    local_version = read_local_version()
+
+    local_commit_result = run_git_command(["rev-parse", "--short", "HEAD"])
+    local_commit = local_commit_result["stdout"] if local_commit_result["ok"] else "unknown"
+
+    branch_result = run_git_command(["rev-parse", "--abbrev-ref", "HEAD"])
+    branch = branch_result["stdout"] if branch_result["ok"] else "main"
+
+    remote_result = run_git_command(["config", "--get", "remote.origin.url"])
+    remote_url = remote_result["stdout"] if remote_result["ok"] else ""
+
+    remote_commit = None
+    remote_error = None
+
+    if remote_url:
+        ls_remote_result = run_git_command(["ls-remote", "origin", f"refs/heads/{branch}"], timeout=30)
+        if ls_remote_result["ok"] and ls_remote_result["stdout"]:
+            remote_commit = ls_remote_result["stdout"].split()[0][:7]
+        else:
+            remote_error = ls_remote_result["stderr"] or "Unable to read remote branch."
+    else:
+        remote_error = "No git remote named origin is configured."
+
+    remote_version = None
+    remote_version_error = None
+
+    owner, repo = parse_github_owner_repo(remote_url)
+
+    if owner and repo:
+        raw_version_url = f"https://raw.githubusercontent.com/{owner}/{repo}/{branch}/VERSION"
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                r = await client.get(raw_version_url)
+            if r.is_success:
+                remote_version = r.text.strip() or None
+            else:
+                remote_version_error = f"Unable to read remote VERSION file. HTTP {r.status_code}."
+        except Exception as exc:
+            remote_version_error = str(exc)
+    else:
+        remote_version_error = "Remote is not a GitHub repository URL."
+
+    update_available = bool(remote_commit and local_commit != "unknown" and remote_commit != local_commit)
+
+    return {
+        "ok": remote_error is None,
+        "update_available": update_available,
+        "local_version": local_version,
+        "remote_version": remote_version,
+        "local_commit": local_commit,
+        "remote_commit": remote_commit,
+        "branch": branch,
+        "remote_url": remote_url,
+        "remote_error": remote_error,
+        "remote_version_error": remote_version_error,
+        "update_command": "cd /opt/api-v3-esim-ui && bash update.sh",
+        "message": "Update available." if update_available else "This install appears to be up to date.",
+    }
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -594,6 +713,52 @@ async def ui():
     .feedback-button:hover {
       box-shadow: 0 14px 28px rgba(37, 99, 235, .28);
       transform: translateY(-2px);
+    }
+
+    .update-check-button {
+      width: auto;
+      min-width: 170px;
+      background: linear-gradient(135deg, #0f172a, #334155);
+      box-shadow: 0 10px 22px rgba(15, 23, 42, .16);
+    }
+
+    .update-check-button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 14px 28px rgba(15, 23, 42, .22);
+    }
+
+    .update-check-status {
+      margin-top: 10px;
+      display: none;
+      border-radius: 12px;
+      padding: 10px 11px;
+      border: 1px solid var(--border);
+      background: #f8fafc;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .update-check-status.show {
+      display: block;
+    }
+
+    .update-check-status.good {
+      background: var(--green-bg);
+      border-color: #bbf7d0;
+      color: var(--green);
+    }
+
+    .update-check-status.warn {
+      background: var(--yellow-bg);
+      border-color: #fde68a;
+      color: #92400e;
+    }
+
+    .update-check-status.bad {
+      background: var(--red-bg);
+      border-color: #fecaca;
+      color: var(--red);
     }
 
     @keyframes feedbackGlow {
@@ -1389,6 +1554,7 @@ async def ui():
         <div class="muted">Send a feature request, bug report, or general feedback from inside the tool.</div>
       </div>
       <button onclick="openFeatureModal()" class="feedback-button"><span>💬 Feedback</span></button>
+          <button onclick="checkForUpdates()" class="update-check-button"><span>⬆️ Check for Updates</span></button>
     </section>
 
     <section class="endpoint-strip">
@@ -2540,6 +2706,73 @@ function submitFeatureRequest() {
 
   if (!opened) {
     setFeedbackSubmitStatus("bad", "Popup blocked. Copy the GitHub issue URL from the output panel.");
+  }
+}
+
+
+async function checkForUpdates() {
+  const box = document.getElementById("updateCheckStatus");
+  const button = document.querySelector(".update-check-button");
+  const originalButtonHtml = button ? button.innerHTML : "";
+
+  function setUpdateStatus(kind, message) {
+    if (!box) return;
+    box.className = "update-check-status show " + kind;
+    box.innerHTML = message;
+  }
+
+  try {
+    if (button) {
+      button.disabled = true;
+      button.innerHTML = '<span class="feedback-inline-spinner"></span>Checking...';
+    }
+
+    setUpdateStatus("warn", "Checking GitHub for updates...");
+
+    const r = await fetch("/api/update/check");
+    const body = await r.json();
+
+    out({
+      action: "Check for Updates",
+      result: body
+    });
+
+    if (!body.ok && body.remote_error) {
+      setUpdateStatus(
+        "bad",
+        "Could not check updates: " + body.remote_error
+      );
+      return;
+    }
+
+    if (body.update_available) {
+      const remoteVersion = body.remote_version || "unknown";
+      setUpdateStatus(
+        "warn",
+        "<strong>Update available.</strong><br>" +
+        "Local: v" + body.local_version + " / " + body.local_commit + "<br>" +
+        "Remote: v" + remoteVersion + " / " + body.remote_commit + "<br><br>" +
+        "Run this on the server:<br>" +
+        "<code>" + body.update_command + "</code>"
+      );
+    } else {
+      setUpdateStatus(
+        "good",
+        "<strong>You're up to date.</strong><br>" +
+        "Current: v" + body.local_version + " / " + body.local_commit
+      );
+    }
+  } catch (err) {
+    setUpdateStatus("bad", "Update check failed: " + (err.message || String(err)));
+    out({
+      error: err.message || String(err),
+      action: "Check for Updates"
+    });
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.innerHTML = originalButtonHtml || "<span>⬆️ Check for Updates</span>";
+    }
   }
 }
 
