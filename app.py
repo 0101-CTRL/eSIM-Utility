@@ -1247,7 +1247,7 @@ async def ui():
     <section class="feature-request-bar">
       <div>
         <strong>Have an idea for this utility?</strong>
-        <div class="muted">Submit a feature request directly to the project’s GitHub Issues page.</div>
+        <div class="muted">Open a prefilled GitHub Issue for the project.</div>
       </div>
       <button onclick="openFeatureModal()">Feature Request</button>
     </section>
@@ -1583,7 +1583,7 @@ async def ui():
         <div class="modal-header">
           <div>
             <h2>Feature Request</h2>
-            <div class="muted">This will create a GitHub Issue in the eSIM Utility repo.</div>
+            <div class="muted">This opens a prefilled GitHub Issue in a new tab.</div>
           </div>
           <button onclick="closeFeatureModal()" class="modal-close">✕</button>
         </div>
@@ -1598,7 +1598,7 @@ async def ui():
         <input id="featureContact" placeholder="Name, email, team, or leave blank" />
 
         <div class="button-row">
-          <button onclick="submitFeatureRequest()">Submit to GitHub</button>
+          <button onclick="submitFeatureRequest()">Open GitHub Issue</button>
           <button onclick="closeFeatureModal()" class="secondary">Cancel</button>
         </div>
       </div>
@@ -2171,7 +2171,7 @@ function closeFeatureModal() {
   }
 }
 
-async function submitFeatureRequest() {
+function submitFeatureRequest() {
   const title = document.getElementById("featureTitle").value.trim();
   const details = document.getElementById("featureDetails").value.trim();
   const contact = document.getElementById("featureContact").value.trim();
@@ -2186,43 +2186,40 @@ async function submitFeatureRequest() {
     return;
   }
 
-  try {
-    setBusy(true, "Submitting feature request...");
+  const issueTitle = "[Feature Request] " + title;
 
-    const r = await fetch("/api/feature-request", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        title,
-        details,
-        contact,
-        page_url: window.location.href
-      })
-    });
+  const issueBody = [
+    "## Feature Request",
+    "",
+    details,
+    "",
+    "## Submitted From",
+    "",
+    "- App: eSIM Utility",
+    "- Page URL: " + window.location.href,
+    "- Submitted: " + new Date().toLocaleString(),
+    "",
+    "## Contact",
+    "",
+    contact || "Not provided"
+  ].join("\n");
 
-    const body = await r.json();
+  const params = new URLSearchParams({
+    title: issueTitle,
+    body: issueBody
+  });
 
-    out({
-      local_status_code: r.status,
-      result: body
-    });
+  const url = "https://github.com/0101-CTRL/eSIM-Utility/issues/new?" + params.toString();
 
-    if (body.ok) {
-      closeFeatureModal();
-      document.getElementById("featureTitle").value = "";
-      document.getElementById("featureDetails").value = "";
-      document.getElementById("featureContact").value = "";
-    }
-  } catch (err) {
-    out({
-      error: err.message || String(err),
-      action: "Submit Feature Request"
-    });
-  } finally {
-    setBusy(false);
-  }
+  window.open(url, "_blank", "noopener,noreferrer");
+
+  out({
+    action: "Open GitHub Issue",
+    message: "Opened a prefilled GitHub Issue in a new tab. The user must click Submit new issue in GitHub.",
+    issue_url: url
+  });
+
+  closeFeatureModal();
 }
 
 </script>
